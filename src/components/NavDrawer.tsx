@@ -5,14 +5,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   Menu, X, Home, Music, Dices, Calendar, Camera,
-  Users, MapPin, ClipboardList,
+  Users, MapPin, ClipboardList, Trophy, Star, ShieldCheck,
 } from "lucide-react";
+import { useUser } from "@/lib/useUser";
 
 const mainNav = [
   { href: "/", label: "Hem", Icon: Home },
   { href: "/snapsvisor", label: "Snapsvisor", Icon: Music },
   { href: "/dryckerlekar", label: "Dryckerlekar", Icon: Dices },
   { href: "/schema", label: "Schema", Icon: Calendar },
+  { href: "/turnering", label: "Turnering", Icon: Trophy },
+  { href: "/leaderboard", label: "Leaderboard", Icon: Star },
   { href: "/minnen", label: "Minnen", Icon: Camera },
 ];
 
@@ -35,6 +38,7 @@ const linkBase: React.CSSProperties = {
 export function NavDrawer({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const pathname = usePathname();
+  const me = useUser();
 
   useEffect(() => { setOpen(false); }, [pathname]);
 
@@ -67,16 +71,19 @@ export function NavDrawer({ children }: { children: React.ReactNode }) {
         }}>
           Midsommar
         </span>
-        <div style={{ width: "36px" }} />
+        <div style={{ width: "36px", display: "flex", justifyContent: "flex-end" }}>
+          {me.username && (
+            <span style={{ fontSize: "11px", color: "#A8C5DA", fontFamily: "var(--font-inter)" }}>
+              {me.username}
+            </span>
+          )}
+        </div>
       </header>
 
       {open && (
         <div
           onClick={() => setOpen(false)}
-          style={{
-            position: "fixed", inset: 0, zIndex: 40,
-            background: "rgba(10,25,45,0.55)",
-          }}
+          style={{ position: "fixed", inset: 0, zIndex: 40, background: "rgba(10,25,45,0.55)" }}
         />
       )}
 
@@ -99,13 +106,13 @@ export function NavDrawer({ children }: { children: React.ReactNode }) {
               fontSize: "9px", letterSpacing: "0.12em", textTransform: "uppercase",
               color: "#A8C5DA", margin: "0 0 3px",
             }}>
-              Midsommar 2026
+              {me.username ? `${me.username} · ${me.role}` : "Midsommar 2026"}
             </p>
             <p style={{
               fontFamily: "var(--font-playfair), 'Playfair Display', Georgia, serif",
               fontSize: "18px", color: "#FAFAF7", margin: 0, fontStyle: "italic",
             }}>
-              Alfta, 20 juni
+              Alfta, 26 juni
             </p>
           </div>
           <button
@@ -119,7 +126,7 @@ export function NavDrawer({ children }: { children: React.ReactNode }) {
 
         <nav style={{ flex: 1, padding: "8px 0", overflowY: "auto" }}>
           {mainNav.map(({ href, label, Icon }) => {
-            const active = pathname === href;
+            const active = pathname === href || pathname.startsWith(href + "/");
             return (
               <Link key={href} href={href} style={{
                 ...linkBase,
@@ -155,6 +162,24 @@ export function NavDrawer({ children }: { children: React.ReactNode }) {
               </Link>
             );
           })}
+
+          {me.is("admin") && (
+            <>
+              <div style={{ margin: "8px 18px", height: "0.5px", background: "rgba(168,197,218,0.2)" }} />
+              <Link href="/anvandare" style={{
+                ...linkBase,
+                padding: "11px 18px",
+                fontSize: "13px",
+                color: pathname === "/anvandare" ? "#FAFAF7" : "#C8A84B",
+                fontWeight: 500,
+                background: pathname === "/anvandare" ? "rgba(200,168,75,0.15)" : "transparent",
+                borderRight: pathname === "/anvandare" ? "3px solid #C8A84B" : "3px solid transparent",
+              }}>
+                <ShieldCheck size={16} strokeWidth={1.5} />
+                Användare
+              </Link>
+            </>
+          )}
         </nav>
 
         <div style={{ padding: "14px 18px", borderTop: "0.5px solid rgba(168,197,218,0.15)" }}>

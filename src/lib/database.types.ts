@@ -1,10 +1,12 @@
+export type Role = "admin" | "lekledare" | "värd" | "gäst";
+
 export type Database = {
   public: {
     Tables: {
       users: {
-        Row: { id: string; username: string; created_at: string };
-        Insert: { id?: string; username: string; created_at?: string };
-        Update: { username?: string };
+        Row: { id: string; username: string; role: Role; created_at: string };
+        Insert: { id?: string; username: string; role?: Role; created_at?: string };
+        Update: { username?: string; role?: Role };
         Relationships: [];
       };
       official_teams: {
@@ -55,7 +57,7 @@ export type Database = {
           official_team_id?: string;
           points?: number;
         };
-        Update: { name?: string; color?: string; points?: number; team_a_id?: string | null; team_b_id?: string | null };
+        Update: { name?: string; color?: string; points?: number };
         Relationships: [];
       };
       tournament_team_members: {

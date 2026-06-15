@@ -2,163 +2,181 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
-import BottomNav from "@/components/BottomNav";
+import { useUser } from "@/lib/useUser";
+import { NavDrawer } from "@/components/NavDrawer";
 
 type OfficialTeam = {
-  id: string;
-  name: string;
-  color: string;
-  emoji: string;
+  id: string; name: string; color: string; emoji: string;
   official_team_members: { user_id: string; users: { username: string } | null }[];
 };
+type TTeam = { id: string; official_team_id: string | null; points: number };
+type Match = { id: string; team_a_id: string | null; team_b_id: string | null; score_a: number; score_b: number; status: string };
+type TeamStats = { team: OfficialTeam; totalPoints: number; wins: number; draws: number; losses: number; members: string[] };
 
-type TournamentTeam = {
-  id: string;
-  official_team_id: string | null;
-  points: number;
-};
-
-type Match = {
-  id: string;
-  team_a_id: string | null;
-  team_b_id: string | null;
-  score_a: number;
-  score_b: number;
-  status: string;
-};
-
-type TeamStats = {
-  team: OfficialTeam;
-  totalPoints: number;
-  wins: number;
-  draws: number;
-  losses: number;
-  members: string[];
-};
+const TEAM_COLORS = ["#1e88e5","#e53935","#43a047","#fdd835","#8e24aa","#fb8c00","#e91e63","#00acc1"];
+const TEAM_EMOJIS = ["🔵","🔴","🟢","🟡","🟣","🟠","💗","🩵"];
 
 export default function LeaderboardPage() {
+  const me = useUser();
   const [stats, setStats] = useState<TeamStats[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showRandomize, setShowRandomize] = useState(false);
+  const [teamCount, setTeamCount] = useState(4);
+  const [teamNames, setTeamNames] = useState<string[]>(["Lag 1","Lag 2","Lag 3","Lag 4"]);
+  const [randomizing, setRandomizing] = useState(false);
 
   async function fetchData() {
-    const [{ data: officialTeams }, { data: tournamentTeams }, { data: matches }] = await Promise.all([
+    const [{ data: ot }, { data: tt }, { data: m }] = await Promise.all([
       supabase.from("official_teams").select("*, official_team_members(user_id, users(username))"),
       supabase.from("tournament_teams").select("id, official_team_id, points"),
       supabase.from("matches").select("*").eq("status", "completed"),
     ]);
+    const teams = (ot as OfficialTeam[]) ?? [];
+    const ttList = (tt as TTeam[]) ?? [];
+    const matchList = (m as Match[]) ?? [];
 
-    const teams = (officialTeams as OfficialTeam[]) ?? [];
-    const ttList = (tournamentTeams as TournamentTeam[]) ?? [];
-    const matchList = (matches as Match[]) ?? [];
-
-    const ttMap = new Map<string, TournamentTeam[]>();
-    for (const tt of ttList) {
-      if (!tt.official_team_id) continue;
-      const arr = ttMap.get(tt.official_team_id) ?? [];
-      arr.push(tt);
-      ttMap.set(tt.official_team_id, arr);
+    const ttMap = new Map<string, TTeam[]>();
+    for (const t of ttList) {
+      if (!t.official_team_id) continue;
+      const arr = ttMap.get(t.official_team_id) ?? [];
+      arr.push(t);
+      ttMap.set(t.official_team_id, arr);
     }
 
-    const ttIdSet = new Map<string, string>();
-    for (const tt of ttList) {
-      if (tt.official_team_id) ttIdSet.set(tt.id, tt.official_team_id);
-    }
-
-    const teamStats: TeamStats[] = teams.map((team) => {
+    const result: TeamStats[] = teams.map((team) => {
       const myTTs = ttMap.get(team.id) ?? [];
-      const totalPoints = myTTs.reduce((sum, tt) => sum + (tt.points ?? 0), 0);
-      const myTTIds = new Set(myTTs.map((tt) => tt.id));
-
+      const totalPoints = myTTs.reduce((s, t) => s + (t.points ?? 0), 0);
+      const myIds = new Set(myTTs.map((t) => t.id));
       let wins = 0, draws = 0, losses = 0;
       for (const match of matchList) {
-        const aIsMe = match.team_a_id && myTTIds.has(match.team_a_id);
-        const bIsMe = match.team_b_id && myTTIds.has(match.team_b_id);
-        if (!aIsMe && !bIsMe) continue;
-
-        if (match.score_a === match.score_b) {
-          draws++;
-        } else {
-          const aWon = match.score_a > match.score_b;
-          if ((aIsMe && aWon) || (bIsMe && !aWon)) wins++;
-          else losses++;
-        }
+        const aMe = match.team_a_id && myIds.has(match.team_a_id);
+        const bMe = match.team_b_id && myIds.has(match.team_b_id);
+        if (!aMe && !bMe) continue;
+        if (match.score_a === match.score_b) { draws++; continue; }
+        const aWon = match.score_a > match.score_b;
+        if ((aMe && aWon) || (bMe && !aWon)) wins++; else losses++;
       }
-
-      const members = team.official_team_members.map((m) => m.users?.username ?? m.user_id);
-
+      const members = team.official_team_members.map((m) => m.users?.username ?? "?");
       return { team, totalPoints, wins, draws, losses, members };
     });
 
-    teamStats.sort((a, b) => b.totalPoints - a.totalPoints);
-    setStats(teamStats);
+    result.sort((a, b) => b.totalPoints - a.totalPoints);
+    setStats(result);
     setLoading(false);
   }
 
   useEffect(() => {
     fetchData();
-
-    const channel = supabase
-      .channel("leaderboard-matches")
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "matches" }, () => {
-        fetchData();
-      })
+    const ch = supabase.channel("leaderboard")
+      .on("postgres_changes", { event: "*", schema: "public", table: "matches" }, fetchData)
       .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
+    return () => { supabase.removeChannel(ch); };
   }, []);
 
-  if (loading) {
-    return (
-      <main className="min-h-screen pb-28 midsommar-bg">
-        <div className="max-w-lg mx-auto p-4 text-center mt-20 text-gray-400">Laddar...</div>
-        <BottomNav />
-      </main>
-    );
+  function updateTeamCount(n: number) {
+    setTeamCount(n);
+    setTeamNames((prev) => {
+      const next = [...prev];
+      while (next.length < n) next.push(`Lag ${next.length + 1}`);
+      return next.slice(0, n);
+    });
   }
 
-  return (
-    <main className="min-h-screen pb-28 midsommar-bg">
-      <div className="max-w-lg mx-auto p-4">
-        <div className="rounded-2xl p-4 mb-6" style={{ background: "#2d6a1f" }}>
-          <h1 className="text-2xl font-bold text-white">Poängtavla</h1>
-          <p className="text-green-200 text-sm">Midsommar 2026</p>
-        </div>
+  async function randomize() {
+    setRandomizing(true);
+    await fetch("/api/admin/teams/randomize", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        teamNames,
+        teamColors: TEAM_COLORS.slice(0, teamCount),
+        teamEmojis: TEAM_EMOJIS.slice(0, teamCount),
+      }),
+    });
+    setShowRandomize(false);
+    setRandomizing(false);
+    await fetchData();
+  }
 
-        {stats.length === 0 ? (
-          <div className="card p-8 text-center text-gray-400">Inga lag än</div>
+  const medals = ["🥇","🥈","🥉"];
+
+  return (
+    <NavDrawer>
+      <div className="page-bg px-4 pt-6 pb-10 max-w-md mx-auto">
+        <div className="flex items-baseline justify-between mb-1">
+          <h1 className="page-title">Leaderboard</h1>
+          {me.is("admin") && (
+            <button onClick={() => setShowRandomize((v) => !v)}
+              className="text-sm font-medium" style={{ color: "var(--gold)" }}>
+              {showRandomize ? "Stäng" : "⚡ Slumpa lag"}
+            </button>
+          )}
+        </div>
+        <div className="gold-rule" />
+
+        {me.is("admin") && showRandomize && (
+          <div className="card p-4 mb-5 space-y-4">
+            <p className="text-xs font-semibold uppercase" style={{ color: "var(--text-muted)", letterSpacing: "0.08em" }}>
+              Slumpa officiella lag
+            </p>
+            <div className="flex items-center gap-3">
+              <span className="text-sm" style={{ color: "var(--text-muted)" }}>Antal lag:</span>
+              {[2,3,4,5,6,7,8].map((n) => (
+                <button key={n} onClick={() => updateTeamCount(n)}
+                  className="w-8 h-8 rounded-lg text-sm font-semibold"
+                  style={{ background: teamCount === n ? "var(--blue-deep)" : "var(--birch)", color: teamCount === n ? "white" : "var(--text-muted)", border: "1px solid var(--border)" }}>
+                  {n}
+                </button>
+              ))}
+            </div>
+            <div className="space-y-2">
+              {teamNames.map((name, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full shrink-0" style={{ background: TEAM_COLORS[i] }} />
+                  <input value={name}
+                    onChange={(e) => setTeamNames((prev) => prev.map((n, j) => j === i ? e.target.value : n))}
+                    className="flex-1 px-3 py-1.5 rounded-lg border text-sm outline-none"
+                    style={{ borderColor: "var(--border)", background: "var(--birch)" }}
+                  />
+                </div>
+              ))}
+            </div>
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+              ⚠️ Raderar befintliga lag och slumpar om alla registrerade användare
+            </p>
+            <button onClick={randomize} disabled={randomizing} className="btn-primary">
+              {randomizing ? "Slumpar..." : "🎲 Slumpa nu"}
+            </button>
+          </div>
+        )}
+
+        {loading ? (
+          <p className="text-center mt-10" style={{ color: "var(--text-muted)" }}>Laddar...</p>
+        ) : stats.length === 0 ? (
+          <div className="card p-8 text-center" style={{ color: "var(--text-muted)" }}>
+            {me.is("admin") ? "Slumpa lag för att starta" : "Inga lag än"}
+          </div>
         ) : (
-          <div className="flex flex-col gap-3">
+          <div className="space-y-3 mt-4">
             {stats.map((s, i) => (
-              <div
-                key={s.team.id}
-                className="card overflow-hidden border-2"
-                style={{ borderColor: s.team.color }}
-              >
+              <div key={s.team.id} className="card overflow-hidden">
                 <div className="px-4 py-3 flex items-center gap-3" style={{ background: s.team.color }}>
-                  <div
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-sm"
-                    style={{ background: i === 0 ? "#f5c842" : i === 1 ? "#c0c0c0" : i === 2 ? "#cd7f32" : "rgba(255,255,255,0.3)" }}
-                  >
-                    {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : i + 1}
-                  </div>
+                  <span className="text-xl">{medals[i] ?? String(i + 1)}</span>
                   <span className="text-lg">{s.team.emoji}</span>
-                  <span className="font-bold text-white text-lg flex-1">{s.team.name}</span>
+                  <span className="font-bold text-white text-base flex-1">{s.team.name}</span>
                   <span className="font-bold text-white text-2xl">{s.totalPoints}p</span>
                 </div>
-                <div className="px-4 py-3 bg-white">
-                  <div className="flex gap-4 text-sm text-gray-600 mb-2">
-                    <span className="font-semibold" style={{ color: "#2d6a1f" }}>{s.wins}V</span>
-                    <span className="font-semibold text-gray-400">{s.draws}O</span>
-                    <span className="font-semibold text-red-500">{s.losses}F</span>
+                <div className="px-4 py-3">
+                  <div className="flex gap-4 text-sm mb-2">
+                    <span className="font-semibold" style={{ color: "var(--leaf)" }}>{s.wins}V</span>
+                    <span className="font-semibold" style={{ color: "var(--text-muted)" }}>{s.draws}O</span>
+                    <span className="font-semibold" style={{ color: "var(--lingon)" }}>{s.losses}F</span>
                   </div>
                   {s.members.length > 0 && (
                     <div className="flex flex-wrap gap-1">
                       {s.members.map((name) => (
-                        <span
-                          key={name}
-                          className="text-xs px-2 py-0.5 rounded-full"
-                          style={{ background: s.team.color + "22", color: s.team.color }}
-                        >
+                        <span key={name} className="text-xs px-2 py-0.5 rounded-full"
+                          style={{ background: s.team.color + "22", color: s.team.color }}>
                           {name}
                         </span>
                       ))}
@@ -170,7 +188,6 @@ export default function LeaderboardPage() {
           </div>
         )}
       </div>
-      <BottomNav />
-    </main>
+    </NavDrawer>
   );
 }
