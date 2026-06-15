@@ -1,14 +1,22 @@
 import type { Metadata, Viewport } from "next";
-import { Geist } from "next/font/google";
+import { Inter, Playfair_Display } from "next/font/google";
 import "./globals.css";
 
-const geist = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
+  display: "swap",
+});
+
+const playfair = Playfair_Display({
+  variable: "--font-playfair",
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Midsommar 2026 🌸",
+  title: "Midsommar 2026",
   description: "Snapsvisor, dryckerlekar, schema och minnen",
 };
 
@@ -24,8 +32,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="sv" className={`${geist.variable} h-full`}>
-      <body className="min-h-full midsommar-bg">{children}</body>
+    <html lang="sv" className={`${inter.variable} ${playfair.variable} h-full`}>
+      <body className="min-h-full">{children}</body>
     </html>
   );
 }
