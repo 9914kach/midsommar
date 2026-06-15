@@ -15,6 +15,26 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
+  if (pathname.startsWith("/admin/login") || pathname === "/api/admin/login") {
+    return NextResponse.next();
+  }
+
+  if (pathname.startsWith("/api/admin")) {
+    const adminCookie = request.cookies.get("midsommar_admin");
+    if (!adminCookie || adminCookie.value !== process.env.ADMIN_PASSWORD) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    return NextResponse.next();
+  }
+
+  if (pathname.startsWith("/admin")) {
+    const adminCookie = request.cookies.get("midsommar_admin");
+    if (!adminCookie || adminCookie.value !== process.env.ADMIN_PASSWORD) {
+      return NextResponse.redirect(new URL("/admin/login", request.url));
+    }
+    return NextResponse.next();
+  }
+
   if (SETUP_PATHS.some((p) => pathname.startsWith(p))) {
     return NextResponse.next();
   }
