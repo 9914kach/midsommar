@@ -4,8 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Menu, X, Home, Music, Dices, Calendar, Camera,
-  Users, MapPin, ClipboardList, Trophy, Star, ShieldCheck,
+  X, Home, Music, Dices, Calendar, Camera,
+  Users, MapPin, ClipboardList, Trophy, Star, ShieldCheck, LogOut,
 } from "lucide-react";
 import { useUser } from "@/lib/useUser";
 
@@ -182,10 +182,28 @@ export function NavDrawer({ children }: { children: React.ReactNode }) {
           )}
         </nav>
 
-        <div style={{ padding: "14px 18px", borderTop: "0.5px solid rgba(168,197,218,0.15)" }}>
+        <div style={{ padding: "10px 18px 14px", borderTop: "0.5px solid rgba(168,197,218,0.15)" }}>
+          {me.username && (
+            <button
+              onClick={async () => {
+                await fetch("/api/logout", { method: "POST" });
+                window.location.href = "/setup";
+              }}
+              style={{
+                display: "flex", alignItems: "center", gap: "10px",
+                background: "none", border: "none", cursor: "pointer",
+                color: "rgba(168,197,218,0.6)", fontSize: "13px",
+                fontFamily: "var(--font-inter), Inter, system-ui, sans-serif",
+                padding: "6px 0", width: "100%",
+              }}
+            >
+              <LogOut size={15} strokeWidth={1.5} />
+              Byt användare
+            </button>
+          )}
           <p style={{
             fontFamily: "var(--font-inter), Inter, system-ui, sans-serif",
-            fontSize: "10px", color: "rgba(168,197,218,0.4)", margin: 0,
+            fontSize: "10px", color: "rgba(168,197,218,0.3)", margin: "6px 0 0",
           }}>
             Fråga värden om lösenordet
           </p>
