@@ -25,7 +25,7 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  if (side && klunkar) {
+  if (bet && side && klunkar) {
     await supabase.from("bet_entries").insert({ bet_id: bet.id, user_id: userId, side, klunkar });
   }
 
