@@ -127,7 +127,7 @@ export default function FemkampPage() {
 
     const fetchedTeams = (teamsData as TTeam[]) ?? [];
     setTeams(fetchedTeams);
-    setEvents((eventsData as TEvent[]) ?? []);
+    setEvents((eventsData as unknown as TEvent[]) ?? []);
     setActiveEventId(activeSetting?.value ?? null);
 
     if (fetchedTeams.length > 0) {
