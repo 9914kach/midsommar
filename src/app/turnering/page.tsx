@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useUser } from "@/lib/useUser";
 import { NavDrawer } from "@/components/NavDrawer";
+import { recommendFormat, previewFormat } from "@/lib/tournament";
 
 type Tournament = { id: string; name: string; game: string; format: string; status: string };
 
@@ -15,21 +16,33 @@ const statusColors: Record<string, { bg: string; text: string }> = {
   active: { bg: "rgba(200,168,75,0.18)", text: "#7a6010" },
   completed: { bg: "rgba(61,107,58,0.12)", text: "var(--leaf)" },
 };
-const formatLabels: Record<string, string> = { bracket: "Bracket", round_robin: "Round Robin", free: "Fri" };
+const formatLabels: Record<string, string> = { bracket: "Bracket", round_robin: "Round Robin", multi_event: "Lagpoäng" };
 
 export default function TurneringPage() {
   const me = useUser();
   const router = useRouter();
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [officialTeamCount, setOfficialTeamCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: "", game: "", format: "bracket" as "bracket" | "round_robin" | "free" });
+  const [form, setForm] = useState({ name: "", game: "", format: "bracket" as "bracket" | "round_robin" | "multi_event" });
   const [creating, setCreating] = useState(false);
 
   useEffect(() => {
-    supabase.from("tournaments").select("*").order("created_at", { ascending: false })
-      .then(({ data }) => { setTournaments((data as Tournament[]) ?? []); setLoading(false); });
+    Promise.all([
+      supabase.from("tournaments").select("*").order("created_at", { ascending: false }),
+      supabase.from("official_teams").select("id", { count: "exact", head: true }),
+    ]).then(([{ data }, { count }]) => {
+      setTournaments((data as Tournament[]) ?? []);
+      const n = count ?? 0;
+      setOfficialTeamCount(n);
+      const rec = recommendFormat(n);
+      if (n > 0) setForm((f) => ({ ...f, format: rec === "free" ? "bracket" : rec }));
+      setLoading(false);
+    });
   }, []);
+
+  const preview = officialTeamCount >= 2 ? previewFormat(officialTeamCount, form.format) : null;
 
   async function createTournament(e: React.FormEvent) {
     e.preventDefault();
@@ -84,22 +97,54 @@ export default function TurneringPage() {
               className="w-full px-3 py-2 rounded-lg border text-sm outline-none"
               style={{ borderColor: "var(--border)", background: "var(--birch)" }}
             />
-            <div className="flex gap-2">
-              {(["bracket", "round_robin", "free"] as const).map((f) => (
-                <button
-                  key={f} type="button"
-                  onClick={() => setForm((v) => ({ ...v, format: f }))}
-                  className="flex-1 py-1.5 rounded-lg text-xs font-medium transition-all"
-                  style={{
-                    background: form.format === f ? "var(--blue-deep)" : "var(--birch)",
-                    color: form.format === f ? "white" : "var(--text-muted)",
-                    border: "1px solid var(--border)",
-                  }}
-                >
-                  {formatLabels[f]}
-                </button>
-              ))}
+
+            <div>
+              <p className="text-xs mb-2" style={{ color: "var(--text-muted)" }}>Format</p>
+              <div className="flex gap-2 flex-wrap">
+                {(["bracket", "round_robin", "multi_event"] as const).map((f) => (
+                  <button
+                    key={f} type="button"
+                    onClick={() => setForm((v) => ({ ...v, format: f }))}
+                    className="flex-1 py-2 rounded-lg text-xs font-medium transition-all"
+                    style={{
+                      background: form.format === f ? "var(--blue-deep)" : "var(--birch)",
+                      color: form.format === f ? "white" : "var(--text-muted)",
+                      border: "1px solid var(--border)",
+                      minWidth: "80px",
+                    }}
+                  >
+                    <div>{formatLabels[f]}</div>
+                    <div className="text-[10px] opacity-70 mt-0.5">
+                      {f === "bracket" ? "Utslagningsmatcher" : f === "round_robin" ? "Alla möter alla" : "Grenar & poäng"}
+                    </div>
+                  </button>
+                ))}
+              </div>
             </div>
+
+            {preview && (
+              <div
+                className="rounded-lg px-3 py-2 text-xs space-y-0.5"
+                style={{ background: "rgba(27,63,110,0.06)", border: "0.5px solid var(--border)" }}
+              >
+                <p className="font-semibold" style={{ color: "var(--blue-deep)" }}>
+                  {officialTeamCount} officiella lag →
+                </p>
+                <p style={{ color: "var(--text-muted)" }}>{preview.description}</p>
+                {preview.byes > 0 && (
+                  <p style={{ color: "var(--text-muted)" }}>
+                    {preview.byes} lag får BYE (fri passage till omgång 2)
+                  </p>
+                )}
+              </div>
+            )}
+
+            {officialTeamCount === 0 && (
+              <p className="text-xs" style={{ color: "var(--text-muted)" }}>
+                Inga officiella lag ännu — slumpa lag på Leaderboard-sidan först.
+              </p>
+            )}
+
             <button type="submit" className="btn-primary" disabled={creating}>
               {creating ? "Skapar..." : "Skapa turnering"}
             </button>

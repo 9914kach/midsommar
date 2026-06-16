@@ -27,7 +27,10 @@ export async function PATCH(
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  if (status === "completed" && match.team_a_id && match.team_b_id) {
+  const hasBothTeams = match.team_a_id && match.team_b_id;
+  const hasByeMatch = (match.team_a_id || match.team_b_id) && !(match.team_a_id && match.team_b_id);
+
+  if (status === "completed" && (hasBothTeams || hasByeMatch)) {
     const finalScoreA = score_a ?? match.score_a;
     const finalScoreB = score_b ?? match.score_b;
 
@@ -40,7 +43,7 @@ export async function PATCH(
       loserId = finalScoreA > finalScoreB ? match.team_b_id : match.team_a_id;
     }
 
-    if (isDraw) {
+    if (isDraw && match.team_a_id && match.team_b_id) {
       const { data: teamA } = await supabase
         .from("tournament_teams")
         .select("points")
@@ -64,6 +67,54 @@ export async function PATCH(
           .update({ points: (teamB.points ?? 0) + 1 })
           .eq("id", match.team_b_id);
       }
+
+      if (match.bracket_position !== null && typeof match.bracket_position === "number") {
+        const nextRound = match.round + 1;
+        const nextPosition = Math.ceil(match.bracket_position / 2);
+        const { data: nextMatch } = await supabase
+          .from("matches")
+          .select("id, team_a_id, team_b_id")
+          .eq("tournament_id", match.tournament_id)
+          .eq("round", nextRound)
+          .eq("bracket_position", nextPosition)
+          .maybeSingle();
+
+        if (nextMatch && match.team_a_id) {
+          const isOdd = match.bracket_position % 2 === 1;
+          await supabase
+            .from("matches")
+            .update(isOdd ? { team_a_id: match.team_a_id } : { team_b_id: match.team_a_id })
+            .eq("id", nextMatch.id);
+        }
+      }
+    } else if (hasByeMatch && !winnerId) {
+      const victoryTeam = match.team_a_id || match.team_b_id;
+      if (victoryTeam) {
+        const { data: team } = await supabase.from("tournament_teams").select("points").eq("id", victoryTeam).single();
+        if (team) {
+          await supabase.from("tournament_teams").update({ points: (team.points ?? 0) + 3 }).eq("id", victoryTeam);
+        }
+
+        if (match.bracket_position !== null && typeof match.bracket_position === "number") {
+          const nextRound = match.round + 1;
+          const nextPosition = Math.ceil(match.bracket_position / 2);
+          const { data: nextMatch } = await supabase
+            .from("matches")
+            .select("id, team_a_id, team_b_id")
+            .eq("tournament_id", match.tournament_id)
+            .eq("round", nextRound)
+            .eq("bracket_position", nextPosition)
+            .maybeSingle();
+
+          if (nextMatch) {
+            const isOdd = match.bracket_position % 2 === 1;
+            await supabase
+              .from("matches")
+              .update(isOdd ? { team_a_id: victoryTeam } : { team_b_id: victoryTeam })
+              .eq("id", nextMatch.id);
+          }
+        }
+      }
     } else if (winnerId && loserId) {
       const { data: winner } = await supabase
         .from("tournament_teams")
@@ -78,7 +129,7 @@ export async function PATCH(
           .eq("id", winnerId);
       }
 
-      if (match.bracket_position !== null && match.bracket_position !== undefined) {
+      if (match.bracket_position !== null && typeof match.bracket_position === "number") {
         const nextRound = match.round + 1;
         const nextPosition = Math.ceil(match.bracket_position / 2);
 

@@ -57,7 +57,7 @@ export type Database = {
           official_team_id?: string;
           points?: number;
         };
-        Update: { name?: string; color?: string; points?: number };
+        Update: { name?: string; color?: string; points?: number; official_team_id?: string | null };
         Relationships: [];
       };
       tournament_team_members: {

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 const PUBLIC_PATHS = ["/login", "/api/login"];
 const SETUP_PATHS = ["/setup", "/api/register"];
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
@@ -20,8 +20,11 @@ export function middleware(request: NextRequest) {
   }
 
   if (pathname.startsWith("/api/admin")) {
+    const role = request.cookies.get("midsommar_role")?.value;
     const adminCookie = request.cookies.get("midsommar_admin");
-    if (!adminCookie || adminCookie.value !== process.env.ADMIN_PASSWORD) {
+    const hasRoleCookie = role === "admin" || role === "lekledare" || role === "värd";
+    const hasAdminCookie = adminCookie && adminCookie.value === process.env.ADMIN_PASSWORD;
+    if (!hasRoleCookie && !hasAdminCookie) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
     return NextResponse.next();

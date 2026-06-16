@@ -13,6 +13,8 @@ export default function AnvandareePage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
+  const [seeding, setSeeding] = useState(false);
+  const [seedMsg, setSeedMsg] = useState<string | null>(null);
 
   useEffect(() => {
     supabase
@@ -23,7 +25,32 @@ export default function AnvandareePage() {
         setUsers((data as User[]) ?? []);
         setLoading(false);
       });
-  }, []);
+  }, [me.id]);
+
+  async function loadUsers() {
+    const { data } = await supabase.from("users").select("id, username, role").order("created_at");
+    setUsers((data as User[]) ?? []);
+  }
+
+  async function seedUsers() {
+    setSeeding(true);
+    setSeedMsg(null);
+    const res = await fetch("/api/admin/seed-users", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+    const json = await res.json();
+    setSeedMsg(json.ok ? `Skapade ${json.created} testgäster` : json.error);
+    await loadUsers();
+    setSeeding(false);
+  }
+
+  async function deleteGuests() {
+    if (!confirm("Ta bort alla gäster? (dina egna kvar)")) return;
+    setSeeding(true);
+    setSeedMsg(null);
+    await fetch("/api/admin/seed-users", { method: "DELETE" });
+    setSeedMsg("Gäster borttagna");
+    await loadUsers();
+    setSeeding(false);
+  }
 
   async function changeRole(userId: string, role: Role) {
     setSaving(userId);
@@ -58,6 +85,33 @@ export default function AnvandareePage() {
           <p className="text-sm mt-2" style={{ color: "var(--text-muted)" }}>
             {users.length} registrerade
           </p>
+        </div>
+
+        <div className="card px-4 py-3 mb-4 space-y-2">
+          <p className="text-xs font-semibold uppercase" style={{ color: "var(--text-muted)", letterSpacing: "0.08em" }}>
+            Testdata
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={seedUsers}
+              disabled={seeding}
+              className="btn-primary"
+              style={{ fontSize: "13px", padding: "8px 14px" }}
+            >
+              {seeding ? "..." : "⚡ Skapa testgäster"}
+            </button>
+            <button
+              onClick={deleteGuests}
+              disabled={seeding}
+              className="btn-outline"
+              style={{ fontSize: "13px", padding: "8px 14px", color: "var(--lingon)", borderColor: "var(--lingon)" }}
+            >
+              🗑 Ta bort gäster
+            </button>
+          </div>
+          {seedMsg && (
+            <p className="text-xs" style={{ color: "var(--text-muted)" }}>{seedMsg}</p>
+          )}
         </div>
 
         {loading ? (

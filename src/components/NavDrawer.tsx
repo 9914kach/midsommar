@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   X, Home, Music, Dices, Calendar, Camera,
-  Users, MapPin, ClipboardList, Trophy, Star, ShieldCheck, LogOut,
+  Users, MapPin, ClipboardList, Trophy, Star, ShieldCheck, LogOut, ListChecks,
 } from "lucide-react";
 import { useUser } from "@/lib/useUser";
 
@@ -23,6 +23,7 @@ const infoNav = [
   { href: "/gastlista", label: "Gästlista", Icon: Users },
   { href: "/hitta", label: "Hitta dit", Icon: MapPin },
   { href: "/packlista", label: "Att ta med", Icon: ClipboardList },
+  { href: "/ansvar", label: "Ansvarsfördelning", Icon: ListChecks },
 ];
 
 const linkBase: React.CSSProperties = {

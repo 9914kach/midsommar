@@ -12,6 +12,7 @@ type OfficialTeam = {
 type TTeam = { id: string; official_team_id: string | null; points: number };
 type Match = { id: string; team_a_id: string | null; team_b_id: string | null; score_a: number; score_b: number; status: string };
 type TeamStats = { team: OfficialTeam; totalPoints: number; wins: number; draws: number; losses: number; members: string[] };
+type AnyUser = { id: string; username: string };
 
 const TEAM_COLORS = ["#1e88e5","#e53935","#43a047","#fdd835","#8e24aa","#fb8c00","#e91e63","#00acc1"];
 const TEAM_EMOJIS = ["🔵","🔴","🟢","🟡","🟣","🟠","💗","🩵"];
@@ -24,6 +25,12 @@ export default function LeaderboardPage() {
   const [teamCount, setTeamCount] = useState(4);
   const [teamNames, setTeamNames] = useState<string[]>(["Lag 1","Lag 2","Lag 3","Lag 4"]);
   const [randomizing, setRandomizing] = useState(false);
+
+  const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<{ name: string; color: string; emoji: string } | null>(null);
+  const [allUsers, setAllUsers] = useState<AnyUser[]>([]);
+  const [memberUserIds, setMemberUserIds] = useState<Record<string, string[]>>({});
+  const [savingTeam, setSavingTeam] = useState(false);
 
   async function fetchData() {
     const [{ data: ot }, { data: tt }, { data: m }] = await Promise.all([
@@ -63,6 +70,12 @@ export default function LeaderboardPage() {
     result.sort((a, b) => b.totalPoints - a.totalPoints);
     setStats(result);
     setLoading(false);
+
+    const ids: Record<string, string[]> = {};
+    for (const team of teams) {
+      ids[team.id] = team.official_team_members.map((m) => m.user_id);
+    }
+    setMemberUserIds(ids);
   }
 
   useEffect(() => {
@@ -72,6 +85,50 @@ export default function LeaderboardPage() {
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, []);
+
+  useEffect(() => {
+    if (me.is("lekledare")) {
+      supabase.from("users").select("id, username").order("username").then(({ data }) => {
+        setAllUsers((data as AnyUser[]) ?? []);
+      });
+    }
+  }, [me.id]);
+
+  function openEdit(s: TeamStats) {
+    setEditingTeamId(s.team.id);
+    setEditDraft({ name: s.team.name, color: s.team.color, emoji: s.team.emoji });
+  }
+
+  async function saveTeam(teamId: string) {
+    if (!editDraft) return;
+    setSavingTeam(true);
+    await fetch(`/api/admin/teams/${teamId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(editDraft),
+    });
+    await fetchData();
+    setEditingTeamId(null);
+    setSavingTeam(false);
+  }
+
+  async function addMember(teamId: string, userId: string) {
+    await fetch(`/api/admin/teams/${teamId}/members`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId }),
+    });
+    await fetchData();
+  }
+
+  async function removeMember(teamId: string, userId: string) {
+    await fetch(`/api/admin/teams/${teamId}/members`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ userId }),
+    });
+    await fetchData();
+  }
 
   function updateTeamCount(n: number) {
     setTeamCount(n);
@@ -99,6 +156,7 @@ export default function LeaderboardPage() {
   }
 
   const medals = ["🥇","🥈","🥉"];
+  const allMemberIds = new Set(Object.values(memberUserIds).flat());
 
   return (
     <NavDrawer>
@@ -158,33 +216,125 @@ export default function LeaderboardPage() {
           </div>
         ) : (
           <div className="space-y-3 mt-4">
-            {stats.map((s, i) => (
-              <div key={s.team.id} className="card overflow-hidden">
-                <div className="px-4 py-3 flex items-center gap-3" style={{ background: s.team.color }}>
-                  <span className="text-xl">{medals[i] ?? String(i + 1)}</span>
-                  <span className="text-lg">{s.team.emoji}</span>
-                  <span className="font-bold text-white text-base flex-1">{s.team.name}</span>
-                  <span className="font-bold text-white text-2xl">{s.totalPoints}p</span>
-                </div>
-                <div className="px-4 py-3">
-                  <div className="flex gap-4 text-sm mb-2">
-                    <span className="font-semibold" style={{ color: "var(--leaf)" }}>{s.wins}V</span>
-                    <span className="font-semibold" style={{ color: "var(--text-muted)" }}>{s.draws}O</span>
-                    <span className="font-semibold" style={{ color: "var(--lingon)" }}>{s.losses}F</span>
+            {stats.map((s, i) => {
+              const isEditing = editingTeamId === s.team.id;
+              const teamMemberIds = memberUserIds[s.team.id] ?? [];
+              const unassigned = allUsers.filter((u) => !allMemberIds.has(u.id));
+
+              return (
+                <div key={s.team.id} className="card overflow-hidden">
+                  <div className="px-4 py-3 flex items-center gap-3" style={{ background: isEditing && editDraft ? editDraft.color : s.team.color }}>
+                    <span className="text-xl">{medals[i] ?? String(i + 1)}</span>
+                    <span className="text-lg">{isEditing && editDraft ? editDraft.emoji : s.team.emoji}</span>
+                    <span className="font-bold text-white text-base flex-1">
+                      {isEditing && editDraft ? editDraft.name : s.team.name}
+                    </span>
+                    <span className="font-bold text-white text-2xl">{s.totalPoints}p</span>
+                    {me.is("lekledare") && !isEditing && (
+                      <button
+                        onClick={() => openEdit(s)}
+                        className="text-white opacity-70 hover:opacity-100 text-lg leading-none"
+                        aria-label="Redigera lag"
+                      >
+                        ✏️
+                      </button>
+                    )}
+                    {isEditing && (
+                      <button onClick={() => setEditingTeamId(null)} className="text-white opacity-70 hover:opacity-100 text-base">✕</button>
+                    )}
                   </div>
-                  {s.members.length > 0 && (
-                    <div className="flex flex-wrap gap-1">
-                      {s.members.map((name) => (
-                        <span key={name} className="text-xs px-2 py-0.5 rounded-full"
-                          style={{ background: s.team.color + "22", color: s.team.color }}>
-                          {name}
-                        </span>
-                      ))}
+
+                  {isEditing && editDraft && (
+                    <div className="px-4 py-3 space-y-3 border-b" style={{ borderColor: "var(--border)" }}>
+                      <input
+                        value={editDraft.name}
+                        onChange={(e) => setEditDraft((d) => d ? { ...d, name: e.target.value } : d)}
+                        className="w-full px-3 py-1.5 rounded-lg border text-sm outline-none"
+                        style={{ borderColor: "var(--border)", background: "var(--birch)" }}
+                        placeholder="Lagnamn"
+                      />
+                      <div className="flex gap-2 flex-wrap">
+                        {TEAM_COLORS.map((c) => (
+                          <button key={c} onClick={() => setEditDraft((d) => d ? { ...d, color: c } : d)}
+                            className="w-7 h-7 rounded-full"
+                            style={{ background: c, outline: editDraft.color === c ? "2px solid white" : "none", outlineOffset: "2px", boxShadow: editDraft.color === c ? `0 0 0 3px ${c}` : "none" }}
+                          />
+                        ))}
+                      </div>
+                      <div className="flex gap-2 flex-wrap">
+                        {TEAM_EMOJIS.map((e) => (
+                          <button key={e} onClick={() => setEditDraft((d) => d ? { ...d, emoji: e } : d)}
+                            className="w-8 h-8 rounded-lg text-lg flex items-center justify-center"
+                            style={{ background: editDraft.emoji === e ? "var(--blue-deep)" : "var(--birch)", border: "1px solid var(--border)" }}
+                          >
+                            {e}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div>
+                        <p className="text-xs font-semibold mb-1" style={{ color: "var(--text-muted)" }}>Medlemmar</p>
+                        <div className="space-y-1">
+                          {s.members.map((name) => {
+                            const u = allUsers.find((u) => u.username === name);
+                            return (
+                              <div key={name} className="flex items-center justify-between text-sm">
+                                <span>{name}</span>
+                                {u && (
+                                  <button onClick={() => removeMember(s.team.id, u.id)}
+                                    className="text-xs px-2 py-0.5 rounded"
+                                    style={{ color: "var(--lingon)" }}>
+                                    Ta bort
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {unassigned.length > 0 && (
+                        <div>
+                          <p className="text-xs font-semibold mb-1" style={{ color: "var(--text-muted)" }}>Lägg till</p>
+                          <div className="flex flex-wrap gap-1">
+                            {unassigned.map((u) => (
+                              <button key={u.id} onClick={() => addMember(s.team.id, u.id)}
+                                className="text-xs px-2 py-0.5 rounded-full"
+                                style={{ background: "rgba(27,63,110,0.08)", color: "var(--blue-deep)", border: "1px solid var(--border)" }}>
+                                + {u.username}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      <button onClick={() => saveTeam(s.team.id)} disabled={savingTeam}
+                        className="btn-primary" style={{ fontSize: "13px", padding: "8px" }}>
+                        {savingTeam ? "Sparar..." : "Spara ändringar"}
+                      </button>
                     </div>
                   )}
+
+                  <div className="px-4 py-3">
+                    <div className="flex gap-4 text-sm mb-2">
+                      <span className="font-semibold" style={{ color: "var(--leaf)" }}>{s.wins}V</span>
+                      <span className="font-semibold" style={{ color: "var(--text-muted)" }}>{s.draws}O</span>
+                      <span className="font-semibold" style={{ color: "var(--lingon)" }}>{s.losses}F</span>
+                    </div>
+                    {s.members.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {s.members.map((name) => (
+                          <span key={name} className="text-xs px-2 py-0.5 rounded-full"
+                            style={{ background: s.team.color + "22", color: s.team.color }}>
+                            {name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
