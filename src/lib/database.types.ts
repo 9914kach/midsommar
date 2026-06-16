@@ -141,6 +141,18 @@ export type Database = {
         Update: { value?: string };
         Relationships: [];
       };
+      bets: {
+        Row: { id: string; created_by: string | null; description: string; status: "open" | "closed" | "resolved"; winner_side: "for" | "against" | null; created_at: string };
+        Insert: { id?: string; created_by?: string | null; description: string; status?: "open" | "closed" | "resolved"; winner_side?: "for" | "against" | null };
+        Update: { status?: "open" | "closed" | "resolved"; winner_side?: "for" | "against" | null };
+        Relationships: [];
+      };
+      bet_entries: {
+        Row: { id: string; bet_id: string; user_id: string; side: "for" | "against"; klunkar: number; created_at: string };
+        Insert: { id?: string; bet_id: string; user_id: string; side: "for" | "against"; klunkar: number };
+        Update: { side?: "for" | "against"; klunkar?: number };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;
