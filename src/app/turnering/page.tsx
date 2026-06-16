@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import { useUser } from "@/lib/useUser";
 import { NavDrawer } from "@/components/NavDrawer";
 import { recommendFormat, previewFormat } from "@/lib/tournament";
+import { usePartyUnlocked } from "@/lib/PartyContext";
 
 type Tournament = { id: string; name: string; game: string; format: string; status: string };
 
@@ -18,8 +19,23 @@ const statusColors: Record<string, { bg: string; text: string }> = {
 };
 const formatLabels: Record<string, string> = { bracket: "Bracket", round_robin: "Round Robin", multi_event: "Lagpoäng" };
 
+function LockedScreen() {
+  return (
+    <div className="page-bg flex items-center justify-center px-8" style={{ minHeight: "calc(100dvh - 56px)" }}>
+      <div className="text-center">
+        <div className="text-6xl mb-5">🌿</div>
+        <h2 className="text-xl font-bold mb-2" style={{ color: "var(--blue-deep)" }}>Snart dags!</h2>
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+          Turneringarna öppnar på midsommarafton.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function TurneringPage() {
   const me = useUser();
+  const partyUnlocked = usePartyUnlocked();
   const router = useRouter();
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [officialTeamCount, setOfficialTeamCount] = useState(0);
@@ -57,6 +73,10 @@ export default function TurneringPage() {
       router.push(`/turnering/${tournament.id}`);
     }
     setCreating(false);
+  }
+
+  if (!partyUnlocked && !me.is("värd")) {
+    return <NavDrawer><LockedScreen /></NavDrawer>;
   }
 
   return (

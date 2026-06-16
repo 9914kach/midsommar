@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import { useUser } from "@/lib/useUser";
 import { NavDrawer } from "@/components/NavDrawer";
 import { previewFormat, recommendFormat, transformMatchesForBracket } from "@/lib/tournament";
+import { usePartyUnlocked } from "@/lib/PartyContext";
 
 const SingleEliminationBracket = dynamic(
   () => import("@g-loot/react-tournament-brackets").then((m) => m.SingleEliminationBracket),
@@ -221,6 +222,7 @@ function MatchCard({ match, teamMap, isLekledare, editingMatchId, editScores, ed
 export default function TurneringDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const me = useUser();
+  const partyUnlocked = usePartyUnlocked();
   const router = useRouter();
   const [tournament, setTournament] = useState<Tournament | null>(null);
   const [teams, setTeams] = useState<TTeam[]>([]);
@@ -509,6 +511,20 @@ export default function TurneringDetailPage({ params }: { params: Promise<{ id: 
   const matchPreview = teams.length >= 2 && format !== "multi_event" ? previewFormat(teams.length, format) : null;
   const recommendedFormat = officialTeams.length >= 2 ? recommendFormat(officialTeams.length) : null;
   const ranking = format === "multi_event" ? computeRanking() : [];
+
+  if (!partyUnlocked && !me.is("värd")) {
+    return (
+      <NavDrawer>
+        <div className="page-bg flex items-center justify-center px-8" style={{ minHeight: "calc(100dvh - 56px)" }}>
+          <div className="text-center">
+            <div className="text-6xl mb-5">🌿</div>
+            <h2 className="text-xl font-bold mb-2" style={{ color: "var(--blue-deep)" }}>Snart dags!</h2>
+            <p className="text-sm" style={{ color: "var(--text-muted)" }}>Turneringarna öppnar på midsommarafton.</p>
+          </div>
+        </div>
+      </NavDrawer>
+    );
+  }
 
   if (loading) return (
     <NavDrawer>

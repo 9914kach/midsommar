@@ -29,6 +29,8 @@ export default function AdminPage() {
   const [userCount, setUserCount] = useState(0);
   const [teamCount, setTeamCount] = useState(0);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [partyUnlocked, setPartyUnlocked] = useState(false);
+  const [togglingParty, setTogglingParty] = useState(false);
 
   useEffect(() => {
     supabase.from("users").select("id", { count: "exact", head: true }).then(({ count }) => {
@@ -40,7 +42,22 @@ export default function AdminPage() {
     supabase.from("tournaments").select("*").order("created_at", { ascending: false }).then(({ data }) => {
       setTournaments(data ?? []);
     });
+    supabase.from("app_settings").select("value").eq("key", "party_unlocked").single().then(({ data }) => {
+      setPartyUnlocked(data?.value === "true");
+    });
   }, []);
+
+  async function toggleParty() {
+    setTogglingParty(true);
+    const next = !partyUnlocked;
+    await fetch("/api/admin/settings", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: "party_unlocked", value: String(next) }),
+    });
+    setPartyUnlocked(next);
+    setTogglingParty(false);
+  }
 
   return (
     <main className="min-h-screen p-4" style={{ background: "#fff7f0" }}>
@@ -58,6 +75,30 @@ export default function AdminPage() {
           <div className="card p-4 text-center" style={{ borderColor: "#c45000", borderWidth: 2 }}>
             <div className="text-3xl font-bold" style={{ color: "#c45000" }}>{teamCount}</div>
             <div className="text-sm text-gray-500 mt-1">Lag</div>
+          </div>
+        </div>
+
+        {/* Party unlock toggle */}
+        <div className="card p-4 mb-6" style={{ border: `2px solid ${partyUnlocked ? "#2d6a1f" : "#c45000"}` }}>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="font-bold text-sm" style={{ color: partyUnlocked ? "#2d6a1f" : "#c45000" }}>
+                {partyUnlocked ? "🎉 Party mode aktivt" : "🔒 Party mode stängt"}
+              </p>
+              <p className="text-xs mt-0.5 text-gray-500">
+                {partyUnlocked
+                  ? "Gäster ser turnering & leaderboard"
+                  : "Gäster ser bara info-sidor"}
+              </p>
+            </div>
+            <button
+              onClick={toggleParty}
+              disabled={togglingParty}
+              className="py-2 px-4 rounded-xl font-bold text-white text-sm shrink-0"
+              style={{ background: partyUnlocked ? "#2d6a1f" : "#c45000" }}
+            >
+              {togglingParty ? "..." : partyUnlocked ? "Stäng" : "Öppna"}
+            </button>
           </div>
         </div>
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useUser } from "@/lib/useUser";
 import { NavDrawer } from "@/components/NavDrawer";
+import { usePartyUnlocked } from "@/lib/PartyContext";
 
 type OfficialTeam = {
   id: string; name: string; color: string; emoji: string;
@@ -17,8 +18,23 @@ type AnyUser = { id: string; username: string };
 const TEAM_COLORS = ["#1e88e5","#e53935","#43a047","#fdd835","#8e24aa","#fb8c00","#e91e63","#00acc1"];
 const TEAM_EMOJIS = ["🔵","🔴","🟢","🟡","🟣","🟠","💗","🩵"];
 
+function LockedScreen() {
+  return (
+    <div className="page-bg flex items-center justify-center px-8" style={{ minHeight: "calc(100dvh - 56px)" }}>
+      <div className="text-center">
+        <div className="text-6xl mb-5">🌸</div>
+        <h2 className="text-xl font-bold mb-2" style={{ color: "var(--blue-deep)" }}>Snart dags!</h2>
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>
+          Den här funktionen låses upp på midsommarafton.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 export default function LeaderboardPage() {
   const me = useUser();
+  const partyUnlocked = usePartyUnlocked();
   const [stats, setStats] = useState<TeamStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [showRandomize, setShowRandomize] = useState(false);
@@ -157,6 +173,10 @@ export default function LeaderboardPage() {
 
   const medals = ["🥇","🥈","🥉"];
   const allMemberIds = new Set(Object.values(memberUserIds).flat());
+
+  if (!partyUnlocked && !me.is("värd")) {
+    return <NavDrawer><LockedScreen /></NavDrawer>;
+  }
 
   return (
     <NavDrawer>

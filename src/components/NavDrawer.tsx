@@ -5,18 +5,20 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   X, Home, Music, Dices, Calendar, Camera,
-  Users, MapPin, ClipboardList, Trophy, Star, ShieldCheck, LogOut, ListChecks,
+  Users, MapPin, ClipboardList, Trophy, Star, ShieldCheck, LogOut, ListChecks, Lock,
 } from "lucide-react";
 import { useUser } from "@/lib/useUser";
+import { supabase } from "@/lib/supabase";
+import { PartyContext } from "@/lib/PartyContext";
 
 const mainNav = [
-  { href: "/", label: "Hem", Icon: Home },
-  { href: "/snapsvisor", label: "Snapsvisor", Icon: Music },
-  { href: "/dryckerlekar", label: "Dryckerlekar", Icon: Dices },
-  { href: "/schema", label: "Schema", Icon: Calendar },
-  { href: "/turnering", label: "Turnering", Icon: Trophy },
-  { href: "/leaderboard", label: "Leaderboard", Icon: Star },
-  { href: "/minnen", label: "Minnen", Icon: Camera },
+  { href: "/", label: "Hem", Icon: Home, locked: false },
+  { href: "/snapsvisor", label: "Snapsvisor", Icon: Music, locked: false },
+  { href: "/dryckerlekar", label: "Dryckerlekar", Icon: Dices, locked: false },
+  { href: "/schema", label: "Schema", Icon: Calendar, locked: false },
+  { href: "/turnering", label: "Turnering", Icon: Trophy, locked: true },
+  { href: "/leaderboard", label: "Leaderboard", Icon: Star, locked: true },
+  { href: "/minnen", label: "Minnen", Icon: Camera, locked: true },
 ];
 
 const infoNav = [
@@ -38,8 +40,19 @@ const linkBase: React.CSSProperties = {
 
 export function NavDrawer({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
+  const [partyUnlocked, setPartyUnlocked] = useState(false);
   const pathname = usePathname();
   const me = useUser();
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval>;
+    const check = () =>
+      supabase.from("app_settings").select("value").eq("key", "party_unlocked").single()
+        .then(({ data }) => setPartyUnlocked(data?.value === "true"));
+    check();
+    timer = setInterval(check, 5000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => { setOpen(false); }, [pathname]);
 
@@ -48,7 +61,10 @@ export function NavDrawer({ children }: { children: React.ReactNode }) {
     return () => { document.body.style.overflow = ""; };
   }, [open]);
 
+  const guestLocked = !partyUnlocked && !me.is("värd");
+
   return (
+    <PartyContext.Provider value={partyUnlocked}>
     <div style={{ minHeight: "100dvh", display: "flex", flexDirection: "column" }}>
       <header style={{
         position: "fixed", top: 0, left: 0, right: 0, zIndex: 30,
@@ -126,20 +142,23 @@ export function NavDrawer({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav style={{ flex: 1, padding: "8px 0", overflowY: "auto" }}>
-          {mainNav.map(({ href, label, Icon }) => {
+          {mainNav.map(({ href, label, Icon, locked }) => {
             const active = pathname === href || pathname.startsWith(href + "/");
+            const isLocked = locked && guestLocked;
             return (
               <Link key={href} href={href} style={{
                 ...linkBase,
                 padding: "12px 18px",
                 fontSize: "14px",
-                color: active ? "#FAFAF7" : "#A8C5DA",
+                color: isLocked ? "rgba(168,197,218,0.35)" : active ? "#FAFAF7" : "#A8C5DA",
                 fontWeight: active ? 500 : 400,
                 background: active ? "rgba(200,168,75,0.15)" : "transparent",
                 borderRight: active ? "3px solid #C8A84B" : "3px solid transparent",
+                pointerEvents: isLocked ? "none" : "auto",
               }}>
                 <Icon size={17} strokeWidth={1.5} />
                 {label}
+                {isLocked && <Lock size={12} strokeWidth={1.5} style={{ marginLeft: "auto", opacity: 0.4 }} />}
               </Link>
             );
           })}
@@ -215,5 +234,6 @@ export function NavDrawer({ children }: { children: React.ReactNode }) {
         {children}
       </main>
     </div>
+    </PartyContext.Provider>
   );
 }
