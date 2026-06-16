@@ -166,6 +166,7 @@ export default function FemkampPage() {
 
   const teamsRef = useRef<TTeam[]>([]);
   const tournamentIdRef = useRef<string | null>(null);
+  const activeEventLockedUntil = useRef<number>(0);
   useEffect(() => { teamsRef.current = teams; }, [teams]);
   useEffect(() => { tournamentIdRef.current = tournament?.id ?? null; }, [tournament]);
 
@@ -182,7 +183,9 @@ export default function FemkampPage() {
           ? supabase.from("tournament_event_results").select("*").in("tournament_team_id", teamsRef.current.map((t) => t.id))
           : Promise.resolve({ data: null }),
       ]);
-      setActiveEventId(activeSetting?.value ?? null);
+      if (Date.now() > activeEventLockedUntil.current) {
+        setActiveEventId(activeSetting?.value ?? null);
+      }
       if (res) setResults(res as EventResult[]);
     }
     const interval = setInterval(pollLive, 3000);
@@ -386,12 +389,13 @@ export default function FemkampPage() {
   );
 
   async function setActiveEvent(eventId: string) {
+    setActiveEventId(eventId);
+    activeEventLockedUntil.current = Date.now() + 5000;
     await fetch("/api/admin/femkamp/active-event", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ eventId }),
     });
-    setActiveEventId(eventId);
   }
 
   function getResultValue(eventId: string, teamId: string): string {
