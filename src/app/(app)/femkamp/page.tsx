@@ -165,27 +165,29 @@ export default function FemkampPage() {
   }
 
   const teamsRef = useRef<TTeam[]>([]);
+  const tournamentIdRef = useRef<string | null>(null);
   useEffect(() => { teamsRef.current = teams; }, [teams]);
+  useEffect(() => { tournamentIdRef.current = tournament?.id ?? null; }, [tournament]);
 
   useEffect(() => { fetchData(); }, []);
 
-  // Realtime: live results + active event for all users
+  // Poll live data every 3s for all users
   useEffect(() => {
-    if (!tournament) return;
-    const channel = supabase
-      .channel("femkamp_live")
-      .on("postgres_changes", { event: "*", schema: "public", table: "tournament_event_results" }, () => {
-        refreshResults(teamsRef.current.map((t) => t.id));
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "app_settings" }, (payload) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const p = payload as any;
-        if (p.new?.key === "femkamp_active_event") setActiveEventId(p.new.value ?? null);
-        if (p.eventType === "DELETE" && p.old?.key === "femkamp_active_event") setActiveEventId(null);
-      })
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [tournament?.id]);
+    async function pollLive() {
+      const tid = tournamentIdRef.current;
+      if (!tid) return;
+      const [{ data: activeSetting }, { data: res }] = await Promise.all([
+        supabase.from("app_settings").select("value").eq("key", "femkamp_active_event").maybeSingle(),
+        teamsRef.current.length > 0
+          ? supabase.from("tournament_event_results").select("*").in("tournament_team_id", teamsRef.current.map((t) => t.id))
+          : Promise.resolve({ data: null }),
+      ]);
+      setActiveEventId(activeSetting?.value ?? null);
+      if (res) setResults(res as EventResult[]);
+    }
+    const interval = setInterval(pollLive, 3000);
+    return () => clearInterval(interval);
+  }, []);
 
   async function syncOfficialTeams(tournamentId: string, existingTeams: TTeam[]) {
     setSyncing(true);
