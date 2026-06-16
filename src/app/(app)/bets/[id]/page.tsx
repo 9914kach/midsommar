@@ -113,8 +113,7 @@ export default function BetDetailPage() {
 
   async function deleteBet() {
     if (!bet || !confirm("Ta bort vadet?")) return;
-    await supabase.from("bet_entries").delete().eq("bet_id", bet.id);
-    await supabase.from("bets").delete().eq("id", bet.id);
+    await fetch(`/api/bets/${bet.id}`, { method: "DELETE" });
     window.location.replace("/bets");
   }
 
