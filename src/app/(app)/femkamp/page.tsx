@@ -774,36 +774,33 @@ export default function FemkampPage() {
                   const val = getResultValue(activeEvent.id, t.id);
                   const num = val !== "" ? parseFloat(val) : null;
                   const btnStyle: React.CSSProperties = {
-                    width: "36px", height: "36px", borderRadius: "8px", border: "1px solid var(--border)",
-                    background: "var(--birch)", fontSize: "18px", fontWeight: 400, cursor: "pointer",
+                    width: "40px", height: "40px", borderRadius: "8px", border: "1px solid var(--border)",
+                    background: "var(--birch)", fontSize: "20px", fontWeight: 400, cursor: "pointer",
                     display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
                     color: "var(--blue-deep)", userSelect: "none",
                   };
-                  const plusBtnStyle: React.CSSProperties = { ...btnStyle, marginRight: "16px" };
                   return (
-                    <div key={t.id}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
-                        <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: t.color ?? "#888", flexShrink: 0 }} />
-                        <span style={{ fontSize: "14px", color: "var(--text-dark)", fontWeight: 500 }}>{t.name}</span>
-                      </div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", paddingRight: "12px" }}>
+                    <div key={t.id} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: t.color ?? "#888", flexShrink: 0 }} />
+                      <span style={{ flex: 1, fontSize: "14px", color: "var(--text-dark)", fontWeight: 500 }}>{t.name}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
                         <button type="button" style={btnStyle}
                           onClick={() => setDraftValueAndScheduleSave(activeEvent.id, t.id, String(Math.max(0, (num ?? 0) - 1)))}>
                           −
+                        </button>
+                        <button type="button" style={btnStyle}
+                          onClick={() => setDraftValueAndScheduleSave(activeEvent.id, t.id, String((num ?? 0) + 1))}>
+                          +
                         </button>
                         <input
                           type="number" min="0" step="1" placeholder="0" value={val}
                           onChange={(e) => setDraftValueAndScheduleSave(activeEvent.id, t.id, e.target.value)}
                           style={{
-                            flex: 1, padding: "7px", borderRadius: "8px", border: "1px solid var(--border)",
+                            width: "52px", padding: "8px 4px", borderRadius: "8px", border: "1px solid var(--border)",
                             background: "var(--birch)", fontSize: "16px", fontWeight: 700, textAlign: "center",
                             color: "var(--blue-deep)", outline: "none",
                           }}
                         />
-                        <button type="button" style={plusBtnStyle}
-                          onClick={() => setDraftValueAndScheduleSave(activeEvent.id, t.id, String((num ?? 0) + 1))}>
-                          +
-                        </button>
                       </div>
                     </div>
                   );
