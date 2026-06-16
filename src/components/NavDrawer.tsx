@@ -183,7 +183,7 @@ export function NavDrawer({ children }: { children: React.ReactNode }) {
             );
           })}
 
-          {me.is("admin") && (
+          {me.is("värd") && (
             <>
               <div style={{ margin: "8px 18px", height: "0.5px", background: "rgba(168,197,218,0.2)" }} />
               <Link href="/anvandare" style={{
