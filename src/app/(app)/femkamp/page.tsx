@@ -164,7 +164,28 @@ export default function FemkampPage() {
     setLoading(false);
   }
 
+  const teamsRef = useRef<TTeam[]>([]);
+  useEffect(() => { teamsRef.current = teams; }, [teams]);
+
   useEffect(() => { fetchData(); }, []);
+
+  // Realtime: live results + active event for all users
+  useEffect(() => {
+    if (!tournament) return;
+    const channel = supabase
+      .channel("femkamp_live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "tournament_event_results" }, () => {
+        refreshResults(teamsRef.current.map((t) => t.id));
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "app_settings" }, (payload) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const p = payload as any;
+        if (p.new?.key === "femkamp_active_event") setActiveEventId(p.new.value ?? null);
+        if (p.eventType === "DELETE" && p.old?.key === "femkamp_active_event") setActiveEventId(null);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [tournament?.id]);
 
   async function syncOfficialTeams(tournamentId: string, existingTeams: TTeam[]) {
     setSyncing(true);
@@ -737,8 +758,8 @@ export default function FemkampPage() {
             </div>
           )}
 
-          {/* Results input for lekledare (edit mode only) */}
-          {isLekledare && editMode && (
+          {/* Results input for lekledare */}
+          {isLekledare && (
             <div style={{ marginTop: "14px", borderTop: "1px solid var(--border)", paddingTop: "12px" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
                 <p style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", letterSpacing: "0.08em", textTransform: "uppercase", margin: 0 }}>
@@ -792,15 +813,15 @@ export default function FemkampPage() {
       ) : (
         <div className="card p-4 mb-4" style={{ borderLeft: "4px solid var(--border)" }}>
           <p style={{ fontSize: "13px", color: "var(--text-muted)" }}>
-            {isLekledare ? "Välj vilken gren som är igång nedan." : "Ingen gren är aktiv just nu."}
+            {isLekledare ? "Tryck på en gren nedan för att starta den." : "Ingen gren är aktiv just nu."}
           </p>
         </div>
       )}
 
       {/* ── Events list ── */}
-      {isLekledare && editMode && (
+      {isLekledare && (
         <p style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)", margin: "0 0 10px" }}>
-          Grenar — dra för att ändra ordning
+          {editMode ? "Grenar — dra för att ändra ordning" : "Grenar"}
         </p>
       )}
       <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
@@ -815,11 +836,22 @@ export default function FemkampPage() {
               return (
                 <SortableItem key={evt.id} id={evt.id} disabled={!isLekledare || !editMode}>
                   {({ listeners, attributes }) => (
-                    <div className="card p-4" style={{ opacity: isActive ? 1 : 0.8 }}>
+                    <div
+                      className="card p-4"
+                      style={{
+                        opacity: isActive ? 1 : 0.85,
+                        cursor: isLekledare && !isActive && !editMode ? "pointer" : "default",
+                        borderLeft: isActive ? "3px solid var(--gold)" : undefined,
+                      }}
+                      onClick={isLekledare && !isActive && !editMode ? () => setActiveEvent(evt.id) : undefined}
+                    >
                       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "6px" }}>
                         <div style={{ flex: 1 }}>
                           <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                            {isActive && <span style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "10px", background: "rgba(200,168,75,0.15)", color: "var(--gold)", fontWeight: 700 }}>IGÅNG</span>}
+                            {isActive
+                              ? <span style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "10px", background: "rgba(200,168,75,0.15)", color: "var(--gold)", fontWeight: 700 }}>IGÅNG</span>
+                              : isLekledare && !editMode && <span style={{ fontSize: "10px", color: "var(--text-muted)" }}>Tryck för att starta</span>
+                            }
                             <p style={{ fontWeight: 600, fontSize: "14px", color: "var(--text-dark)", margin: 0 }}>{evt.name}</p>
                           </div>
                           {evt.description && (
@@ -841,17 +873,13 @@ export default function FemkampPage() {
                             <button
                               {...listeners} {...attributes}
                               style={{ cursor: "grab", background: "none", border: "none", padding: "6px 4px", color: "var(--text-muted)", fontSize: "16px", lineHeight: 1, touchAction: "none" }}
+                              onClick={(e) => e.stopPropagation()}
                             >
                               ⠿
                             </button>
-                            {!isActive && (
-                              <button onClick={() => setActiveEvent(evt.id)}
-                                style={{ fontSize: "11px", padding: "4px 8px", borderRadius: "8px", border: "1px solid var(--gold)", color: "var(--gold)", background: "none", cursor: "pointer" }}>
-                                Välj
-                              </button>
-                            )}
                             <button
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 if (isEditingThis) { setEditingPlacements(null); return; }
                                 setDraftPlacements(pts ? pts.map(String) : Array(teams.length).fill(""));
                                 setEditingPlacements(evt.id);
@@ -860,7 +888,7 @@ export default function FemkampPage() {
                             >
                               {isEditingThis ? "✕" : "✏️"}
                             </button>
-                            <button onClick={() => deleteEvent(evt.id)}
+                            <button onClick={(e) => { e.stopPropagation(); deleteEvent(evt.id); }}
                               style={{ fontSize: "11px", color: "var(--lingon)", background: "none", border: "none", cursor: "pointer", padding: "4px" }}>
                               🗑
                             </button>
