@@ -93,8 +93,14 @@ export function generateBracketMatches(
   const size = nextPowerOf2(seeded.length);
   const totalRounds = Math.log2(size);
 
-  const padded: (string | null)[] = [...seeded];
-  while (padded.length < size) padded.push(null);
+  const byes = size - seeded.length;
+  const padded: (string | null)[] = [];
+  for (let i = 0; i < byes; i++) {
+    padded.push(seeded[i], null);
+  }
+  for (let i = byes; i < seeded.length; i += 2) {
+    padded.push(seeded[i], seeded[i + 1] ?? null);
+  }
 
   const matches: MatchInsert[] = [];
 

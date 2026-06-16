@@ -7,16 +7,59 @@ export async function PATCH(
 ) {
   const { id } = await params;
   const body = await request.json();
-  const { score_a, score_b, status } = body;
+  const { score_a, score_b, status, winner, reset } = body;
+
+  // ── Reset a completed bracket match ──────────────────────────────────────
+  if (reset) {
+    const { data: match } = await supabase.from("matches").select("*").eq("id", id).single();
+    if (!match) return NextResponse.json({ error: "Not found" }, { status: 404 });
+
+    const oldWinnerId = match.score_a > match.score_b ? match.team_a_id : match.team_b_id;
+
+    // Remove old winner from next-round match slot
+    if (match.bracket_position !== null) {
+      const nextPos = Math.ceil(match.bracket_position / 2);
+      const { data: nextMatch } = await supabase
+        .from("matches").select("id, team_a_id, team_b_id")
+        .eq("tournament_id", match.tournament_id)
+        .eq("round", match.round + 1)
+        .eq("bracket_position", nextPos)
+        .maybeSingle();
+      if (nextMatch) {
+        const isOdd = match.bracket_position % 2 === 1;
+        await supabase.from("matches")
+          .update(isOdd ? { team_a_id: null } : { team_b_id: null })
+          .eq("id", nextMatch.id);
+      }
+    }
+
+    // Subtract points from old winner
+    if (oldWinnerId) {
+      const { data: winner } = await supabase.from("tournament_teams").select("points").eq("id", oldWinnerId).single();
+      if (winner) {
+        await supabase.from("tournament_teams").update({ points: Math.max(0, (winner.points ?? 0) - 3) }).eq("id", oldWinnerId);
+      }
+    }
+
+    await supabase.from("matches").update({ status: "pending", score_a: 0, score_b: 0 }).eq("id", id);
+    return NextResponse.json({ ok: true });
+  }
+
+  // ── Declare winner shorthand ─────────────────────────────────────────────
+  let resolvedScoreA = score_a;
+  let resolvedScoreB = score_b;
+  let resolvedStatus = status;
+  if (winner === "a") { resolvedScoreA = 1; resolvedScoreB = 0; resolvedStatus = "completed"; }
+  if (winner === "b") { resolvedScoreA = 0; resolvedScoreB = 1; resolvedStatus = "completed"; }
 
   const updatePayload: {
     score_a?: number;
     score_b?: number;
     status?: "pending" | "active" | "completed";
   } = {};
-  if (score_a !== undefined) updatePayload.score_a = score_a;
-  if (score_b !== undefined) updatePayload.score_b = score_b;
-  if (status !== undefined) updatePayload.status = status;
+  if (resolvedScoreA !== undefined) updatePayload.score_a = resolvedScoreA;
+  if (resolvedScoreB !== undefined) updatePayload.score_b = resolvedScoreB;
+  if (resolvedStatus !== undefined) updatePayload.status = resolvedStatus;
 
   const { data: match, error } = await supabase
     .from("matches")
@@ -30,9 +73,9 @@ export async function PATCH(
   const hasBothTeams = match.team_a_id && match.team_b_id;
   const hasByeMatch = (match.team_a_id || match.team_b_id) && !(match.team_a_id && match.team_b_id);
 
-  if (status === "completed" && (hasBothTeams || hasByeMatch)) {
-    const finalScoreA = score_a ?? match.score_a;
-    const finalScoreB = score_b ?? match.score_b;
+  if (resolvedStatus === "completed" && (hasBothTeams || hasByeMatch)) {
+    const finalScoreA = resolvedScoreA ?? match.score_a;
+    const finalScoreB = resolvedScoreB ?? match.score_b;
 
     let winnerId: string | null = null;
     let loserId: string | null = null;

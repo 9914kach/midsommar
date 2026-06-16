@@ -219,6 +219,61 @@ function MatchCard({ match, teamMap, isLekledare, editingMatchId, editScores, ed
   );
 }
 
+function BracketPickCard({ match, teamMap, isLekledare, onDeclare, onReset }: {
+  match: Match;
+  teamMap: Map<string, TTeam>;
+  isLekledare: boolean;
+  onDeclare: (side: "a" | "b") => void;
+  onReset: () => void;
+}) {
+  const tA = match.team_a_id ? teamMap.get(match.team_a_id) : null;
+  const tB = match.team_b_id ? teamMap.get(match.team_b_id) : null;
+  const isDone = match.status === "completed";
+  const winnerIsA = isDone && match.score_a > match.score_b;
+  const winnerIsB = isDone && match.score_b > match.score_a;
+
+  const rowStyle = (isWinner: boolean, isLoser: boolean): React.CSSProperties => ({
+    display: "flex", alignItems: "center", gap: "10px", padding: "10px 0",
+    opacity: isLoser ? 0.45 : 1,
+  });
+
+  return (
+    <div className="card px-4 py-2">
+      {([
+        { team: tA, side: "a" as const, isWinner: winnerIsA, isLoser: isDone && !winnerIsA },
+        { team: tB, side: "b" as const, isWinner: winnerIsB, isLoser: isDone && !winnerIsB },
+      ]).map(({ team, side, isWinner, isLoser }, i) => (
+        <div key={side}>
+          {i === 1 && <div style={{ height: "0.5px", background: "var(--border)", margin: "0 0" }} />}
+          <div style={rowStyle(isWinner, isLoser)}>
+            {team?.color && <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: team.color, flexShrink: 0 }} />}
+            <span style={{ flex: 1, fontSize: "14px", fontWeight: isWinner ? 700 : 500, color: isWinner ? "var(--leaf)" : "var(--text-dark)" }}>
+              {team?.name ?? "TBD"}
+            </span>
+            {isWinner && <span style={{ fontSize: "12px", color: "var(--leaf)", fontWeight: 600 }}>✓ Vann</span>}
+            {!isDone && isLekledare && team && (
+              <button
+                onClick={() => onDeclare(side)}
+                style={{ fontSize: "12px", fontWeight: 600, padding: "5px 12px", borderRadius: "8px", border: "none", cursor: "pointer", background: "var(--blue-deep)", color: "white" }}
+              >
+                Vann →
+              </button>
+            )}
+          </div>
+        </div>
+      ))}
+      {isDone && isLekledare && (
+        <button
+          onClick={onReset}
+          style={{ fontSize: "11px", color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer", padding: "4px 0 6px", display: "block" }}
+        >
+          Rätta
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function TurneringDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
   const me = useUser();
@@ -469,6 +524,24 @@ export default function TurneringDetailPage({ params }: { params: Promise<{ id: 
     }
     setEditingMatchId(null);
     setSavingEdit(false);
+    await fetchData();
+  }
+
+  async function declareWinner(matchId: string, side: "a" | "b") {
+    await fetch(`/api/matches/${matchId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ winner: side }),
+    });
+    await fetchData();
+  }
+
+  async function resetMatch(matchId: string) {
+    await fetch(`/api/matches/${matchId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reset: true }),
+    });
     await fetchData();
   }
 
@@ -955,31 +1028,40 @@ export default function TurneringDetailPage({ params }: { params: Promise<{ id: 
                   </div>
                 </div>
 
-                {/* Scoring cards — active/pending matches only */}
-                {matches.some((m) => m.status !== "completed" && (m.team_a_id || m.team_b_id)) && (
-                  <div className="space-y-3">
-                    <p className="text-xs font-semibold uppercase" style={{ color: "var(--text-muted)", letterSpacing: "0.08em" }}>
-                      Pågående matcher
-                    </p>
-                    {matches
-                      .filter((m) => m.status !== "completed" && (m.team_a_id || m.team_b_id))
-                      .map((match) => <MatchCard key={match.id} match={match} teamMap={teamMap} isLekledare={isLekledare} editingMatchId={editingMatchId} editScores={editScores} editError={editError} savingEdit={savingEdit} setEditingMatchId={setEditingMatchId} setEditScores={setEditScores} setEditError={setEditError} updateScore={updateScore} setMatchStatus={setMatchStatus} saveEditedScore={saveEditedScore} />)
-                    }
-                  </div>
-                )}
-
-                {/* Completed matches for lekledare (Rätta) */}
-                {isLekledare && matches.some((m) => m.status === "completed" && m.team_a_id && m.team_b_id) && (
-                  <div className="space-y-3 mt-4">
-                    <p className="text-xs font-semibold uppercase" style={{ color: "var(--text-muted)", letterSpacing: "0.08em" }}>
-                      Avslutade matcher
-                    </p>
-                    {matches
-                      .filter((m) => m.status === "completed" && m.team_a_id && m.team_b_id)
-                      .map((match) => <MatchCard key={match.id} match={match} teamMap={teamMap} isLekledare={isLekledare} editingMatchId={editingMatchId} editScores={editScores} editError={editError} savingEdit={savingEdit} setEditingMatchId={setEditingMatchId} setEditScores={setEditScores} setEditError={setEditError} updateScore={updateScore} setMatchStatus={setMatchStatus} saveEditedScore={saveEditedScore} />)
-                    }
-                  </div>
-                )}
+                {/* Bracket pick cards — grouped by round */}
+                {(() => {
+                  const bracketRoundNums = [...new Set(
+                    matches.filter((m) => m.bracket_position !== null && (m.team_a_id || m.team_b_id)).map((m) => m.round)
+                  )].sort((a, b) => a - b);
+                  if (bracketRoundNums.length === 0) return null;
+                  return (
+                    <div className="space-y-5">
+                      {bracketRoundNums.map((round) => {
+                        const roundMatches = matches.filter((m) => m.round === round && m.bracket_position !== null && (m.team_a_id || m.team_b_id));
+                        const allDone = roundMatches.every((m) => m.status === "completed");
+                        return (
+                          <div key={round}>
+                            <p className="text-xs font-semibold uppercase mb-2" style={{ color: allDone ? "var(--text-muted)" : "var(--blue-deep)", letterSpacing: "0.08em" }}>
+                              {round === Math.max(...bracketRoundNums) ? "Final" : `Omgång ${round}`}
+                            </p>
+                            <div className="space-y-2">
+                              {roundMatches.map((match) => (
+                                <BracketPickCard
+                                  key={match.id}
+                                  match={match}
+                                  teamMap={teamMap}
+                                  isLekledare={isLekledare}
+                                  onDeclare={(side) => declareWinner(match.id, side)}
+                                  onReset={() => resetMatch(match.id)}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
               </>
             )}
           </>
