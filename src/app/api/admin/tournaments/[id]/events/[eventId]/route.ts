@@ -7,10 +7,11 @@ export async function PATCH(
 ) {
   const { eventId } = await params;
   const body = await request.json();
-  const payload: { name?: string; scoring_type?: string; placement_points?: string | null } = {};
+  const payload: { name?: string; scoring_type?: string; placement_points?: string | null; sort_order?: number } = {};
   if (body.name !== undefined) payload.name = body.name;
   if (body.scoring_type !== undefined) payload.scoring_type = body.scoring_type;
   if (body.placement_points !== undefined) payload.placement_points = body.placement_points || null;
+  if (body.sort_order !== undefined) payload.sort_order = body.sort_order;
 
   const { data, error } = await supabase
     .from("tournament_events")

@@ -21,16 +21,20 @@ export function useUser(): User {
   const [user, setUser] = useState<User>(EMPTY);
 
   useEffect(() => {
-    // Optimistic render from cookies, then sync with DB
     const id = getCookie("midsommar_user_id_pub");
     const username = getCookie("midsommar_username");
-    const role = (getCookie("midsommar_role") || "gäst") as Role;
+    const realRole = (getCookie("midsommar_role") || "gäst") as Role;
+    const simRole = (sessionStorage.getItem("simulate_role") || "") as Role;
+    const role = simRole || realRole;
     if (id) setUser(makeUser(id, username, role));
 
     fetch("/api/me")
       .then((r) => r.json())
       .then(({ user: u }) => {
-        if (u) setUser(makeUser(u.id, u.username, u.role as Role));
+        if (u) {
+          const sim = (sessionStorage.getItem("simulate_role") || "") as Role;
+          setUser(makeUser(u.id, u.username, (sim || u.role) as Role));
+        }
       })
       .catch(() => {});
   }, []);

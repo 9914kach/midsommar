@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   X, Home, Music, Dices, Calendar, Camera,
-  Users, MapPin, ClipboardList, Trophy, Star, ShieldCheck, LogOut, ListChecks, Lock, Coins, Medal,
+  Users, Users2, MapPin, ClipboardList, Trophy, Star, ShieldCheck, LogOut, ListChecks, Lock, Coins, Medal,
 } from "lucide-react";
 import { useUser } from "@/lib/useUser";
 import { supabase } from "@/lib/supabase";
@@ -14,9 +14,10 @@ import { PartyContext } from "@/lib/PartyContext";
 const mainNav = [
   { href: "/", label: "Hem", Icon: Home, locked: false },
   { href: "/snapsvisor", label: "Snapsvisor", Icon: Music, locked: false },
-  { href: "/dryckerlekar", label: "Dryckerlekar", Icon: Dices, locked: false },
+  { href: "/dryckerlekar", label: "Dricklekar", Icon: Dices, locked: false },
   { href: "/schema", label: "Schema", Icon: Calendar, locked: false },
   { href: "/femkamp", label: "Femkamp", Icon: Medal, locked: false },
+  { href: "/lag", label: "Lag", Icon: Users2, locked: false },
   { href: "/turnering", label: "Turnering", Icon: Trophy, locked: true },
   { href: "/leaderboard", label: "Leaderboard", Icon: Star, locked: true },
   { href: "/bets", label: "Betting", Icon: Coins, locked: true },
@@ -40,11 +41,29 @@ const linkBase: React.CSSProperties = {
   transition: "background 0.15s",
 };
 
+function getCookie(name: string): string {
+  if (typeof document === "undefined") return "";
+  const m = document.cookie.match(new RegExp("(?:^|; )" + name + "=([^;]*)"));
+  return m ? decodeURIComponent(m[1]) : "";
+}
+
+const ROLES = ["gäst", "värd", "lekledare", "admin"] as const;
+
 export function NavDrawer({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [partyUnlocked, setPartyUnlocked] = useState(false);
+  const [simRole, setSimRole] = useState<string>("");
+  const [mounted, setMounted] = useState(false);
   const pathname = usePathname();
   const me = useUser();
+
+  useEffect(() => {
+    setSimRole(sessionStorage.getItem("simulate_role") ?? "");
+    setMounted(true);
+  }, []);
+
+  const realRole = mounted ? getCookie("midsommar_role") : "";
+  const isRealAdmin = realRole === "admin";
 
   useEffect(() => {
     let timer: ReturnType<typeof setInterval>;
@@ -232,9 +251,53 @@ export function NavDrawer({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <main style={{ flex: 1, paddingTop: "56px" }}>
+      <main style={{ flex: 1, paddingTop: "56px", paddingBottom: mounted && isRealAdmin ? "44px" : undefined }}>
         {children}
       </main>
+
+      {isRealAdmin && (
+        <div style={{
+          position: "fixed", bottom: 0, left: 0, right: 0, zIndex: 60,
+          background: simRole ? "#5B2D8E" : "#1a1a1a",
+          borderTop: `2px solid ${simRole ? "#a855f7" : "#333"}`,
+          display: "flex", alignItems: "center", gap: "6px",
+          padding: "6px 12px", height: "44px",
+        }}>
+          <span style={{ fontSize: "10px", color: simRole ? "#d8b4fe" : "#888", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", flexShrink: 0 }}>
+            {simRole ? `Simulerar: ${simRole}` : "Rolltest"}
+          </span>
+          <div style={{ display: "flex", gap: "4px", flex: 1 }}>
+            {ROLES.map((r) => (
+              <button key={r} onClick={() => {
+                if (simRole === r) {
+                  sessionStorage.removeItem("simulate_role");
+                  setSimRole("");
+                } else {
+                  sessionStorage.setItem("simulate_role", r);
+                  setSimRole(r);
+                }
+                window.location.reload();
+              }} style={{
+                flex: 1, padding: "4px 0", borderRadius: "6px", fontSize: "11px", fontWeight: 600,
+                border: "none", cursor: "pointer",
+                background: simRole === r ? "#a855f7" : "rgba(255,255,255,0.08)",
+                color: simRole === r ? "white" : "#aaa",
+              }}>
+                {r}
+              </button>
+            ))}
+          </div>
+          {simRole && (
+            <button onClick={() => {
+              sessionStorage.removeItem("simulate_role");
+              setSimRole("");
+              window.location.reload();
+            }} style={{ fontSize: "11px", color: "#d8b4fe", background: "none", border: "none", cursor: "pointer", flexShrink: 0 }}>
+              ✕ Avsluta
+            </button>
+          )}
+        </div>
+      )}
     </div>
     </PartyContext.Provider>
   );

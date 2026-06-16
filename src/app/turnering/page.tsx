@@ -46,7 +46,7 @@ export default function TurneringPage() {
 
   useEffect(() => {
     Promise.all([
-      supabase.from("tournaments").select("*").order("created_at", { ascending: false }),
+      supabase.from("tournaments").select("*").neq("format", "multi_event").order("created_at", { ascending: false }),
       supabase.from("official_teams").select("id", { count: "exact", head: true }),
     ]).then(([{ data }, { count }]) => {
       setTournaments((data as Tournament[]) ?? []);
