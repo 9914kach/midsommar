@@ -35,7 +35,8 @@
       "Bash(npm list *)",
       "Bash(xargs grep *)",
       "Bash(xargs cat *)",
-      "Bash(grep -E \"\\\\.tsx$\")"
+      "Bash(grep -E \"\\\\.tsx$\")",
+      "Bash(gh run *)"
     ]
   }
 }

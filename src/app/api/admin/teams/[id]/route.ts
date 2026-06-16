@@ -11,16 +11,28 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
-  if (!hasRole(getRole(req), "lekledare")) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
+  const userId = req.cookies.get("midsommar_user_id")?.value;
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
   const body = await req.json();
+  const isAdmin = hasRole(getRole(req), "lekledare");
+
+  // Non-admins may only rename their own team
+  if (!isAdmin) {
+    const { data: membership } = await supabase
+      .from("official_team_members")
+      .select("user_id")
+      .eq("team_id", id)
+      .eq("user_id", userId)
+      .maybeSingle();
+    if (!membership) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   const payload: { name?: string; color?: string; emoji?: string } = {};
   if (body.name !== undefined) payload.name = body.name;
-  if (body.color !== undefined) payload.color = body.color;
-  if (body.emoji !== undefined) payload.emoji = body.emoji;
+  if (isAdmin && body.color !== undefined) payload.color = body.color;
+  if (isAdmin && body.emoji !== undefined) payload.emoji = body.emoji;
 
   const { data, error } = await supabase
     .from("official_teams")
