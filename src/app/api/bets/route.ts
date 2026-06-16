@@ -8,11 +8,20 @@ export async function POST(req: NextRequest) {
   const { description, side, klunkar } = await req.json();
   if (!description?.trim()) return NextResponse.json({ error: "description required" }, { status: 400 });
 
-  const { data: bet, error } = await supabase
+  let { data: bet, error } = await supabase
     .from("bets")
     .insert({ description: description.trim(), created_by: userId })
     .select()
     .single();
+
+  // FK on created_by may point to auth.users — retry without it
+  if (error?.code === "23503") {
+    ({ data: bet, error } = await supabase
+      .from("bets")
+      .insert({ description: description.trim(), created_by: null })
+      .select()
+      .single());
+  }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
