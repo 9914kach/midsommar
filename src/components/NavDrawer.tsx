@@ -130,7 +130,7 @@ export function NavDrawer({ children }: { children: React.ReactNode }) {
               fontFamily: "var(--font-playfair), 'Playfair Display', Georgia, serif",
               fontSize: "18px", color: "#FAFAF7", margin: 0, fontStyle: "italic",
             }}>
-              Alfta, 26 juni
+              Midsommar, 26 juni
             </p>
           </div>
           <button
