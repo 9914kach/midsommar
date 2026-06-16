@@ -13,7 +13,7 @@ export async function PATCH(
 
   const { id } = await params;
   const body = await req.json();
-  const payload: Record<string, unknown> = {};
+  const payload: { status?: "open" | "closed" | "resolved"; winner_side?: "for" | "against" | null } = {};
   if (body.status !== undefined) payload.status = body.status;
   if (body.winner_side !== undefined) payload.winner_side = body.winner_side;
 
