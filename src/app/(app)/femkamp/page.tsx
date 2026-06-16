@@ -122,8 +122,9 @@ export default function FemkampPage() {
   // Edit mode (lekledare only)
   const [editMode, setEditMode] = useState(false);
 
-  // Reset
+  // Reset / delete
   const [resetting, setResetting] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   async function fetchData() {
     const { data: tournaments } = await supabase
@@ -169,7 +170,29 @@ export default function FemkampPage() {
     setSyncing(true);
     const { data: officialTeams } = await supabase.from("official_teams").select("id, name, color").order("created_at");
     if (!officialTeams) { setSyncing(false); return; }
-    const linkedIds = new Set(existingTeams.map((t) => t.official_team_id).filter(Boolean));
+
+    const officialIds = new Set(officialTeams.map((ot) => ot.id));
+
+    // Stale: linked to an official team that no longer exists
+    const stale = existingTeams.filter((t) => t.official_team_id && !officialIds.has(t.official_team_id));
+
+    // Duplicates: same official_team_id linked more than once — keep the first, remove the rest
+    const seen = new Set<string>();
+    const duplicates = existingTeams.filter((t) => {
+      if (!t.official_team_id) return false;
+      if (seen.has(t.official_team_id)) return true;
+      seen.add(t.official_team_id);
+      return false;
+    });
+
+    const toDelete = [...stale, ...duplicates];
+    await Promise.all(toDelete.map((t) =>
+      fetch(`/api/admin/tournaments/${tournamentId}/teams/${t.id}`, { method: "DELETE" })
+    ));
+
+    // Add official teams not yet linked
+    const remaining = existingTeams.filter((t) => !toDelete.find((d) => d.id === t.id));
+    const linkedIds = new Set(remaining.map((t) => t.official_team_id).filter(Boolean));
     const toAdd = officialTeams.filter((ot) => !linkedIds.has(ot.id));
     await Promise.all(toAdd.map((ot) =>
       fetch(`/api/admin/tournaments/${tournamentId}/teams`, {
@@ -178,6 +201,7 @@ export default function FemkampPage() {
         body: JSON.stringify({ name: ot.name, color: ot.color, official_team_id: ot.id }),
       })
     ));
+
     setSyncing(false);
     await fetchData();
   }
@@ -281,6 +305,22 @@ export default function FemkampPage() {
     setShowPenalty(false);
     setAddingPenalty(false);
     await fetchData();
+  }
+
+  async function deleteFemkamp() {
+    if (!tournament) return;
+    if (!confirm("Ta bort hela femkampen? Alla grenar, lag och resultat raderas permanent.")) return;
+    setDeleting(true);
+    await fetch(`/api/admin/tournaments/${tournament.id}`, { method: "DELETE" });
+    setTournament(null);
+    setTeams([]);
+    setEvents([]);
+    setResults([]);
+    setActiveEventId(null);
+    setDraftResults({});
+    setEditMode(false);
+    setNotFound(true);
+    setDeleting(false);
   }
 
   async function resetFemkamp() {
@@ -1003,16 +1043,26 @@ export default function FemkampPage() {
             </form>
           )}
 
-          {/* Reset */}
+          {/* Reset / Delete */}
           {!showAddEvent && !showPenalty && (
-            <button
-              onClick={resetFemkamp}
-              disabled={resetting}
-              className="w-full py-3 rounded-xl text-sm font-semibold"
-              style={{ background: "rgba(139,38,53,0.06)", color: "var(--lingon)", border: "1px solid rgba(139,38,53,0.2)", marginTop: "8px" }}
-            >
-              {resetting ? "Nollställer..." : "⚠ Nollställ alla resultat"}
-            </button>
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", marginTop: "8px" }}>
+              <button
+                onClick={resetFemkamp}
+                disabled={resetting || deleting}
+                className="w-full py-3 rounded-xl text-sm font-semibold"
+                style={{ background: "rgba(139,38,53,0.06)", color: "var(--lingon)", border: "1px solid rgba(139,38,53,0.2)" }}
+              >
+                {resetting ? "Nollställer..." : "⚠ Nollställ alla resultat"}
+              </button>
+              <button
+                onClick={deleteFemkamp}
+                disabled={deleting || resetting}
+                className="w-full py-3 rounded-xl text-sm font-semibold"
+                style={{ background: "rgba(139,38,53,0.12)", color: "var(--lingon)", border: "1px solid rgba(139,38,53,0.35)" }}
+              >
+                {deleting ? "Raderar..." : "🗑 Ta bort femkampen"}
+              </button>
+            </div>
           )}
         </div>
       )}
