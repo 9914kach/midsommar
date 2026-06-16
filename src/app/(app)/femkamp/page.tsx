@@ -34,14 +34,33 @@ function computeRanking(teams: TTeam[], events: TEvent[], results: EventResult[]
           ? (a.value ?? 0) - (b.value ?? 0)
           : (b.value ?? 0) - (a.value ?? 0)
       );
-      sorted.forEach((r, i) => {
-        totals[r.tournament_team_id] = (totals[r.tournament_team_id] ?? 0) + (placementPts[i] ?? 0);
-      });
+      // Ties: average placement points across tied positions
+      let i = 0;
+      while (i < sorted.length) {
+        const val = sorted[i].value;
+        let j = i;
+        while (j < sorted.length && sorted[j].value === val) j++;
+        const sharedPts = placementPts.slice(i, j).reduce((s, p) => s + p, 0) / (j - i);
+        for (let k = i; k < j; k++) {
+          totals[sorted[k].tournament_team_id] = (totals[sorted[k].tournament_team_id] ?? 0) + sharedPts;
+        }
+        i = j;
+      }
     } else if (evt.scoring_type === "points") {
       for (const r of evtResults) totals[r.tournament_team_id] = (totals[r.tournament_team_id] ?? 0) + (r.value ?? 0);
     } else {
-      const sorted = [...evtResults].sort((a, b) => (a.value ?? 0) - (b.value ?? 0));
-      sorted.forEach((r, i) => { totals[r.tournament_team_id] = (totals[r.tournament_team_id] ?? 0) + (teams.length - i); });
+      const sorted = [...evtResults].sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
+      let i = 0;
+      while (i < sorted.length) {
+        const val = sorted[i].value;
+        let j = i;
+        while (j < sorted.length && sorted[j].value === val) j++;
+        const sharedPts = Array.from({ length: j - i }, (_, k) => teams.length - (i + k)).reduce((s, p) => s + p, 0) / (j - i);
+        for (let k = i; k < j; k++) {
+          totals[sorted[k].tournament_team_id] = (totals[sorted[k].tournament_team_id] ?? 0) + sharedPts;
+        }
+        i = j;
+      }
     }
   }
   return teams.map((t) => ({ team: t, total: totals[t.id] ?? 0 })).sort((a, b) => b.total - a.total);
@@ -55,11 +74,15 @@ function computeEventRanking(teams: TTeam[], evt: TEvent, results: EventResult[]
       ? (a.value ?? 0) - (b.value ?? 0)
       : (b.value ?? 0) - (a.value ?? 0)
   );
-  return sorted.map((r, i) => ({
-    team: teams.find((t) => t.id === r.tournament_team_id)!,
-    value: r.value,
-    rank: i,
-  })).filter((r) => r.team);
+  // Assign same rank to tied values
+  const ranked: { team: TTeam; value: number | null; rank: number }[] = [];
+  let rank = 0;
+  for (let i = 0; i < sorted.length; i++) {
+    if (i > 0 && sorted[i].value !== sorted[i - 1].value) rank = i;
+    const team = teams.find((t) => t.id === sorted[i].tournament_team_id);
+    if (team) ranked.push({ team, value: sorted[i].value, rank });
+  }
+  return ranked;
 }
 
 function SortableItem({ id, disabled, children }: {
