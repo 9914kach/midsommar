@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
+import { ALL_ROLES, ROLE_COLORS, ROLE_LABELS, type Role } from "@/lib/roles";
 
 type Tournament = {
   id: string;
@@ -11,6 +12,8 @@ type Tournament = {
   format: string;
   status: string;
 };
+
+type User = { id: string; username: string; role: Role };
 
 const statusColors: Record<string, string> = {
   draft: "#888",
@@ -26,16 +29,21 @@ const formatLabels: Record<string, string> = {
 
 export default function AdminPage() {
   const router = useRouter();
-  const [userCount, setUserCount] = useState(0);
   const [teamCount, setTeamCount] = useState(0);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [partyUnlocked, setPartyUnlocked] = useState(false);
   const [togglingParty, setTogglingParty] = useState(false);
+  const [users, setUsers] = useState<User[]>([]);
+  const [savingRole, setSavingRole] = useState<string | null>(null);
+  const [deletingUser, setDeletingUser] = useState<string | null>(null);
+
+  async function loadUsers() {
+    const { data } = await supabase.from("users").select("id, username, role").order("created_at");
+    setUsers((data as User[]) ?? []);
+  }
 
   useEffect(() => {
-    supabase.from("users").select("id", { count: "exact", head: true }).then(({ count }) => {
-      setUserCount(count ?? 0);
-    });
+    loadUsers();
     supabase.from("official_teams").select("id", { count: "exact", head: true }).then(({ count }) => {
       setTeamCount(count ?? 0);
     });
@@ -46,6 +54,25 @@ export default function AdminPage() {
       setPartyUnlocked(data?.value === "true");
     });
   }, []);
+
+  async function changeRole(userId: string, role: Role) {
+    setSavingRole(userId);
+    await fetch(`/api/users/${userId}/role`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role }),
+    });
+    setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role } : u)));
+    setSavingRole(null);
+  }
+
+  async function deleteUser(userId: string, username: string) {
+    if (!confirm(`Ta bort ${username}?`)) return;
+    setDeletingUser(userId);
+    await fetch(`/api/users/${userId}`, { method: "DELETE" });
+    setUsers((prev) => prev.filter((u) => u.id !== userId));
+    setDeletingUser(null);
+  }
 
   async function toggleParty() {
     setTogglingParty(true);
@@ -69,7 +96,7 @@ export default function AdminPage() {
 
         <div className="grid grid-cols-2 gap-3 mb-6">
           <div className="card p-4 text-center" style={{ borderColor: "#c45000", borderWidth: 2 }}>
-            <div className="text-3xl font-bold" style={{ color: "#c45000" }}>{userCount}</div>
+            <div className="text-3xl font-bold" style={{ color: "#c45000" }}>{users.length}</div>
             <div className="text-sm text-gray-500 mt-1">Deltagare</div>
           </div>
           <div className="card p-4 text-center" style={{ borderColor: "#c45000", borderWidth: 2 }}>
@@ -117,6 +144,39 @@ export default function AdminPage() {
           >
             Ny turnering
           </button>
+        </div>
+
+        {/* User management */}
+        <h2 className="text-lg font-bold mb-3" style={{ color: "#c45000" }}>Användare</h2>
+        <div className="flex flex-col gap-2 mb-6">
+          {users.map((u) => (
+            <div key={u.id} className="card p-3 flex items-center gap-3">
+              <span className="font-semibold text-gray-800 flex-1 truncate">{u.username}</span>
+              <select
+                value={u.role}
+                disabled={savingRole === u.id}
+                onChange={(e) => changeRole(u.id, e.target.value as Role)}
+                className="text-sm rounded-lg px-2 py-1 border font-medium"
+                style={{ borderColor: "#e8c4a0", color: ROLE_COLORS[u.role], background: "#fff7f0" }}
+              >
+                {ALL_ROLES.map((r) => (
+                  <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                ))}
+              </select>
+              <button
+                onClick={() => deleteUser(u.id, u.username)}
+                disabled={deletingUser === u.id || u.role === "admin"}
+                className="text-xs px-3 py-1.5 rounded-lg font-medium shrink-0"
+                style={{
+                  background: u.role === "admin" ? "#eee" : "rgba(196,80,0,0.1)",
+                  color: u.role === "admin" ? "#aaa" : "#c45000",
+                  cursor: u.role === "admin" ? "not-allowed" : "pointer",
+                }}
+              >
+                {deletingUser === u.id ? "..." : "Ta bort"}
+              </button>
+            </div>
+          ))}
         </div>
 
         <h2 className="text-lg font-bold mb-3" style={{ color: "#c45000" }}>Turneringar</h2>
