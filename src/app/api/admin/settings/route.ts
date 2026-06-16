@@ -1,9 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabase } from "@/lib/supabase";
 
+function isAdmin(request: NextRequest) {
+  const cookie = request.cookies.get("midsommar_admin");
+  return cookie?.value === process.env.ADMIN_PASSWORD;
+}
+
+export async function GET(request: NextRequest) {
+  if (!isAdmin(request)) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  return NextResponse.json({ ok: true });
+}
+
 export async function PATCH(request: NextRequest) {
-  const adminCookie = request.cookies.get("midsommar_admin");
-  if (!adminCookie || adminCookie.value !== process.env.ADMIN_PASSWORD) {
+  if (!isAdmin(request)) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

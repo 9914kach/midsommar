@@ -43,6 +43,8 @@ export default function AdminPage() {
   }
 
   useEffect(() => {
+    fetch("/api/admin/settings")
+      .then((r) => { if (r.status === 403) window.location.replace("/admin/login"); });
     loadUsers();
     supabase.from("official_teams").select("id", { count: "exact", head: true }).then(({ count }) => {
       setTeamCount(count ?? 0);
@@ -57,20 +59,28 @@ export default function AdminPage() {
 
   async function changeRole(userId: string, role: Role) {
     setSavingRole(userId);
-    await fetch(`/api/users/${userId}/role`, {
+    const res = await fetch(`/api/users/${userId}/role`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ role }),
     });
-    setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role } : u)));
+    if (res.ok) {
+      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, role } : u)));
+    } else {
+      alert("Kunde inte ändra roll – är du inloggad som admin?");
+    }
     setSavingRole(null);
   }
 
   async function deleteUser(userId: string, username: string) {
     if (!confirm(`Ta bort ${username}?`)) return;
     setDeletingUser(userId);
-    await fetch(`/api/users/${userId}`, { method: "DELETE" });
-    setUsers((prev) => prev.filter((u) => u.id !== userId));
+    const res = await fetch(`/api/users/${userId}`, { method: "DELETE" });
+    if (res.ok) {
+      setUsers((prev) => prev.filter((u) => u.id !== userId));
+    } else {
+      alert("Kunde inte ta bort användaren.");
+    }
     setDeletingUser(null);
   }
 
