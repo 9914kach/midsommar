@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@g-loot/react-tournament-brackets": "^1.0.31-rc",
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.108.2",
     "lucide-react": "^1.18.0",

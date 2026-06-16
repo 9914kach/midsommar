@@ -2,10 +2,24 @@
 
 import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabase";
 import { useUser } from "@/lib/useUser";
 import { NavDrawer } from "@/components/NavDrawer";
-import { previewFormat, recommendFormat } from "@/lib/tournament";
+import { previewFormat, recommendFormat, transformMatchesForBracket } from "@/lib/tournament";
+
+const SingleEliminationBracket = dynamic(
+  () => import("@g-loot/react-tournament-brackets").then((m) => m.SingleEliminationBracket),
+  { ssr: false }
+);
+const SVGViewer = dynamic(
+  () => import("@g-loot/react-tournament-brackets").then((m) => m.SVGViewer),
+  { ssr: false }
+);
+const BracketMatch = dynamic(
+  () => import("@g-loot/react-tournament-brackets").then((m) => m.Match),
+  { ssr: false }
+);
 
 type Tournament = { id: string; name: string; game: string; format: string; status: string };
 type TTeam = { id: string; name: string; color: string | null; points: number };
@@ -24,6 +38,139 @@ const statusBg: Record<string, string> = {
 const STATUS_LABELS: Record<string, string> = { draft: "Utkast", active: "Pågår", completed: "Avslutad" };
 const STATUS_NEXT: Record<string, string> = { draft: "active", active: "completed" };
 const TEAM_COLORS = ["#e63946", "#f4a261", "#2a9d8f", "#457b9d", "#8b5cf6", "#10b981", "#c77dff", "#6b7280"];
+
+type MatchCardProps = {
+  match: Match; teamMap: Map<string, TTeam>; isLekledare: boolean;
+  editingMatchId: string | null; editScores: { a: number; b: number };
+  editError: string | null; savingEdit: boolean;
+  setEditingMatchId: (id: string | null) => void;
+  setEditScores: (s: { a: number; b: number }) => void;
+  setEditError: (e: string | null) => void;
+  updateScore: (id: string, field: "score_a" | "score_b", delta: number) => void;
+  setMatchStatus: (id: string, status: string) => void;
+  saveEditedScore: () => void;
+};
+
+function MatchCard({ match, teamMap, isLekledare, editingMatchId, editScores, editError, savingEdit,
+  setEditingMatchId, setEditScores, setEditError, updateScore, setMatchStatus, saveEditedScore }: MatchCardProps) {
+  const tA = match.team_a_id ? teamMap.get(match.team_a_id) : null;
+  const tB = match.team_b_id ? teamMap.get(match.team_b_id) : null;
+  const isActive = match.status === "active";
+  const isDone = match.status === "completed";
+  const isEditing = editingMatchId === match.id;
+  const isBye = isDone && (!match.team_a_id || !match.team_b_id);
+
+  if (isBye) return (
+    <div className="card px-4 py-2 flex items-center gap-3 opacity-60">
+      {(tA ?? tB) && <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: (tA ?? tB)?.color ?? "#888" }} />}
+      <span className="text-sm font-medium" style={{ color: "var(--text-dark)" }}>
+        {(tA ?? tB)?.name ?? "?"} — BYE (fri passage)
+      </span>
+      <span className="ml-auto text-xs" style={{ color: "var(--leaf)" }}>✓</span>
+    </div>
+  );
+
+  return (
+    <div className="card p-4" style={{ background: statusBg[match.status] ?? "var(--birch)" }}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 flex-1 min-w-0">
+          {tA?.color && <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: tA.color }} />}
+          <span className="font-semibold text-sm truncate" style={{ color: "var(--text-dark)" }}>{tA?.name ?? "TBD"}</span>
+        </div>
+        <div className="flex items-center gap-2 px-3 shrink-0">
+          <span className="text-xl font-bold tabular-nums" style={{ color: "var(--blue-deep)" }}>{match.score_a}</span>
+          <span style={{ color: "var(--border)" }}>–</span>
+          <span className="text-xl font-bold tabular-nums" style={{ color: "var(--blue-deep)" }}>{match.score_b}</span>
+        </div>
+        <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
+          <span className="font-semibold text-sm truncate" style={{ color: "var(--text-dark)" }}>{tB?.name ?? "TBD"}</span>
+          {tB?.color && <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: tB.color }} />}
+        </div>
+      </div>
+
+      {isActive && (
+        <div className="flex gap-2 mt-3">
+          <div className="flex gap-1 flex-1">
+            <button onClick={() => updateScore(match.id, "score_a", -1)}
+              className="w-9 h-9 rounded-lg font-bold text-lg flex items-center justify-center"
+              style={{ background: "var(--border)", color: "var(--text-dark)" }}>–</button>
+            <button onClick={() => updateScore(match.id, "score_a", 1)}
+              className="w-9 h-9 rounded-lg font-bold text-lg flex items-center justify-center"
+              style={{ background: "var(--blue-deep)", color: "white" }}>+</button>
+          </div>
+          {isLekledare && (
+            <button onClick={() => setMatchStatus(match.id, "completed")}
+              className="px-3 py-1 rounded-lg text-xs font-semibold"
+              style={{ background: "var(--leaf)", color: "white" }}>Avsluta</button>
+          )}
+          <div className="flex gap-1 flex-1 justify-end">
+            <button onClick={() => updateScore(match.id, "score_b", 1)}
+              className="w-9 h-9 rounded-lg font-bold text-lg flex items-center justify-center"
+              style={{ background: "var(--blue-deep)", color: "white" }}>+</button>
+            <button onClick={() => updateScore(match.id, "score_b", -1)}
+              className="w-9 h-9 rounded-lg font-bold text-lg flex items-center justify-center"
+              style={{ background: "var(--border)", color: "var(--text-dark)" }}>–</button>
+          </div>
+        </div>
+      )}
+
+      {match.status === "pending" && isLekledare && (
+        <button onClick={() => setMatchStatus(match.id, "active")}
+          className="w-full mt-3 py-1.5 rounded-lg text-xs font-semibold"
+          style={{ background: "rgba(200,168,75,0.2)", color: "#7a6010" }}>
+          ▶ Starta match
+        </button>
+      )}
+
+      {isDone && !isEditing && (
+        <div className="flex items-center justify-between mt-2">
+          <p className="text-xs" style={{ color: "var(--text-muted)" }}>✓ Avslutad</p>
+          {isLekledare && (
+            <button onClick={() => { setEditingMatchId(match.id); setEditScores({ a: match.score_a, b: match.score_b }); setEditError(null); }}
+              className="text-xs underline" style={{ color: "var(--blue-mid)" }}>Rätta</button>
+          )}
+        </div>
+      )}
+
+      {isDone && isEditing && (
+        <div className="mt-3 space-y-2">
+          <div className="flex items-center gap-3 justify-center">
+            <div className="flex items-center gap-1">
+              <button onClick={() => setEditScores({ a: Math.max(0, editScores.a - 1), b: editScores.b })}
+                className="w-8 h-8 rounded-lg font-bold flex items-center justify-center"
+                style={{ background: "var(--border)", color: "var(--text-dark)" }}>–</button>
+              <span className="text-xl font-bold w-8 text-center tabular-nums" style={{ color: "var(--blue-deep)" }}>{editScores.a}</span>
+              <button onClick={() => setEditScores({ a: editScores.a + 1, b: editScores.b })}
+                className="w-8 h-8 rounded-lg font-bold flex items-center justify-center"
+                style={{ background: "var(--blue-deep)", color: "white" }}>+</button>
+            </div>
+            <span style={{ color: "var(--border)" }}>–</span>
+            <div className="flex items-center gap-1">
+              <button onClick={() => setEditScores({ a: editScores.a, b: Math.max(0, editScores.b - 1) })}
+                className="w-8 h-8 rounded-lg font-bold flex items-center justify-center"
+                style={{ background: "var(--border)", color: "var(--text-dark)" }}>–</button>
+              <span className="text-xl font-bold w-8 text-center tabular-nums" style={{ color: "var(--blue-deep)" }}>{editScores.b}</span>
+              <button onClick={() => setEditScores({ a: editScores.a, b: editScores.b + 1 })}
+                className="w-8 h-8 rounded-lg font-bold flex items-center justify-center"
+                style={{ background: "var(--blue-deep)", color: "white" }}>+</button>
+            </div>
+          </div>
+          {editError && <p className="text-xs text-center" style={{ color: "var(--lingon)" }}>{editError}</p>}
+          <div className="flex gap-2">
+            <button onClick={saveEditedScore} disabled={savingEdit}
+              className="flex-1 py-1.5 rounded-lg text-xs font-semibold"
+              style={{ background: "var(--leaf)", color: "white" }}>
+              {savingEdit ? "..." : "Spara korrigering"}
+            </button>
+            <button onClick={() => { setEditingMatchId(null); setEditError(null); }}
+              className="flex-1 py-1.5 rounded-lg text-xs font-semibold"
+              style={{ background: "var(--border)", color: "var(--text-dark)" }}>Avbryt</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function TurneringDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -657,8 +804,86 @@ export default function TurneringDetailPage({ params }: { params: Promise<{ id: 
           </div>
         )}
 
-        {/* ── BRACKET / ROUND_ROBIN VIEW ── */}
-        {format !== "multi_event" && (
+        {/* ── BRACKET VIEW ── */}
+        {format === "bracket" && (
+          <>
+            {rounds.length === 0 ? (
+              <div className="card p-8 text-center" style={{ color: "var(--text-muted)" }}>
+                {hasTeams ? "Tryck 'Generera matcher' för att starta" : "Lägg till lag för att börja"}
+              </div>
+            ) : (
+              <>
+                {/* Bracket visualisation */}
+                <div className="mb-5 -mx-4 overflow-x-auto">
+                  <div style={{ minWidth: "320px" }}>
+                    <SingleEliminationBracket
+                      matches={transformMatchesForBracket(matches, teamMap)}
+                      matchComponent={BracketMatch}
+                      options={{
+                        style: {
+                          roundHeader: { backgroundColor: "#1B3F6E", fontColor: "#FAFAF7" },
+                          connectorColor: "#d4c5a9",
+                          connectorColorHighlight: "#C8A84B",
+                        },
+                      }}
+                      theme={{
+                        textColor: { main: "#2D3748", highlighted: "#1B3F6E", dark: "#1B3F6E" },
+                        matchBackground: { wonColor: "#eef7ee", lostColor: "#F5F0E8" },
+                        score: {
+                          background: { wonColor: "#3D6B3A", lostColor: "#e2d9c8" },
+                          text: { highlightedWonColor: "#fff", highlightedLostColor: "#4a5568" },
+                        },
+                        border: { color: "#e2d9c8", highlightedColor: "#C8A84B" },
+                        roundHeader: { backgroundColor: "#1B3F6E", fontColor: "#FAFAF7" },
+                        connectorColor: "#d4c5a9",
+                        connectorColorHighlight: "#C8A84B",
+                        svgBackground: "#F5F0E8",
+                      }}
+                      svgWrapper={({ children, ...props }) => (
+                        <SVGViewer
+                          width={Math.max(props.bracketWidth ?? 400, 320)}
+                          height={Math.max(props.bracketHeight ?? 300, 200)}
+                          {...props}
+                        >
+                          {children}
+                        </SVGViewer>
+                      )}
+                    />
+                  </div>
+                </div>
+
+                {/* Scoring cards — active/pending matches only */}
+                {matches.some((m) => m.status !== "completed" && (m.team_a_id || m.team_b_id)) && (
+                  <div className="space-y-3">
+                    <p className="text-xs font-semibold uppercase" style={{ color: "var(--text-muted)", letterSpacing: "0.08em" }}>
+                      Pågående matcher
+                    </p>
+                    {matches
+                      .filter((m) => m.status !== "completed" && (m.team_a_id || m.team_b_id))
+                      .map((match) => <MatchCard key={match.id} match={match} teamMap={teamMap} isLekledare={isLekledare} editingMatchId={editingMatchId} editScores={editScores} editError={editError} savingEdit={savingEdit} setEditingMatchId={setEditingMatchId} setEditScores={setEditScores} setEditError={setEditError} updateScore={updateScore} setMatchStatus={setMatchStatus} saveEditedScore={saveEditedScore} />)
+                    }
+                  </div>
+                )}
+
+                {/* Completed matches for lekledare (Rätta) */}
+                {isLekledare && matches.some((m) => m.status === "completed" && m.team_a_id && m.team_b_id) && (
+                  <div className="space-y-3 mt-4">
+                    <p className="text-xs font-semibold uppercase" style={{ color: "var(--text-muted)", letterSpacing: "0.08em" }}>
+                      Avslutade matcher
+                    </p>
+                    {matches
+                      .filter((m) => m.status === "completed" && m.team_a_id && m.team_b_id)
+                      .map((match) => <MatchCard key={match.id} match={match} teamMap={teamMap} isLekledare={isLekledare} editingMatchId={editingMatchId} editScores={editScores} editError={editError} savingEdit={savingEdit} setEditingMatchId={setEditingMatchId} setEditScores={setEditScores} setEditError={setEditError} updateScore={updateScore} setMatchStatus={setMatchStatus} saveEditedScore={saveEditedScore} />)
+                    }
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
+
+        {/* ── ROUND ROBIN VIEW ── */}
+        {format === "round_robin" && (
           <>
             {rounds.length === 0 ? (
               <div className="card p-8 text-center" style={{ color: "var(--text-muted)" }}>
@@ -671,132 +896,9 @@ export default function TurneringDetailPage({ params }: { params: Promise<{ id: 
                     Omgång {round}
                   </p>
                   <div className="space-y-3">
-                    {matches.filter((m) => m.round === round).map((match) => {
-                      const tA = match.team_a_id ? teamMap.get(match.team_a_id) : null;
-                      const tB = match.team_b_id ? teamMap.get(match.team_b_id) : null;
-                      const isActive = match.status === "active";
-                      const isDone = match.status === "completed";
-                      const isEditing = editingMatchId === match.id;
-                      const isBye = isDone && (!match.team_a_id || !match.team_b_id);
-
-                      if (isBye) return (
-                        <div key={match.id} className="card px-4 py-2 flex items-center gap-3 opacity-60">
-                          {(tA ?? tB) && <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: (tA ?? tB)?.color ?? "#888" }} />}
-                          <span className="text-sm font-medium" style={{ color: "var(--text-dark)" }}>
-                            {(tA ?? tB)?.name ?? "?"} — BYE (fri passage)
-                          </span>
-                          <span className="ml-auto text-xs" style={{ color: "var(--leaf)" }}>✓</span>
-                        </div>
-                      );
-
-                      return (
-                        <div key={match.id} className="card p-4" style={{ background: statusBg[match.status] ?? "var(--birch)" }}>
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-2 flex-1 min-w-0">
-                              {tA?.color && <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: tA.color }} />}
-                              <span className="font-semibold text-sm truncate" style={{ color: "var(--text-dark)" }}>{tA?.name ?? "TBD"}</span>
-                            </div>
-                            <div className="flex items-center gap-2 px-3 shrink-0">
-                              <span className="text-xl font-bold tabular-nums" style={{ color: "var(--blue-deep)" }}>{match.score_a}</span>
-                              <span style={{ color: "var(--border)" }}>–</span>
-                              <span className="text-xl font-bold tabular-nums" style={{ color: "var(--blue-deep)" }}>{match.score_b}</span>
-                            </div>
-                            <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
-                              <span className="font-semibold text-sm truncate" style={{ color: "var(--text-dark)" }}>{tB?.name ?? "TBD"}</span>
-                              {tB?.color && <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: tB.color }} />}
-                            </div>
-                          </div>
-
-                          {isActive && (
-                            <div className="flex gap-2 mt-3">
-                              <div className="flex gap-1 flex-1">
-                                <button onClick={() => updateScore(match.id, "score_a", -1)}
-                                  className="w-9 h-9 rounded-lg font-bold text-lg flex items-center justify-center"
-                                  style={{ background: "var(--border)", color: "var(--text-dark)" }}>–</button>
-                                <button onClick={() => updateScore(match.id, "score_a", 1)}
-                                  className="w-9 h-9 rounded-lg font-bold text-lg flex items-center justify-center"
-                                  style={{ background: "var(--blue-deep)", color: "white" }}>+</button>
-                              </div>
-                              {isLekledare && (
-                                <button onClick={() => setMatchStatus(match.id, "completed")}
-                                  className="px-3 py-1 rounded-lg text-xs font-semibold"
-                                  style={{ background: "var(--leaf)", color: "white" }}>
-                                  Avsluta
-                                </button>
-                              )}
-                              <div className="flex gap-1 flex-1 justify-end">
-                                <button onClick={() => updateScore(match.id, "score_b", 1)}
-                                  className="w-9 h-9 rounded-lg font-bold text-lg flex items-center justify-center"
-                                  style={{ background: "var(--blue-deep)", color: "white" }}>+</button>
-                                <button onClick={() => updateScore(match.id, "score_b", -1)}
-                                  className="w-9 h-9 rounded-lg font-bold text-lg flex items-center justify-center"
-                                  style={{ background: "var(--border)", color: "var(--text-dark)" }}>–</button>
-                              </div>
-                            </div>
-                          )}
-
-                          {match.status === "pending" && isLekledare && (
-                            <button onClick={() => setMatchStatus(match.id, "active")}
-                              className="w-full mt-3 py-1.5 rounded-lg text-xs font-semibold"
-                              style={{ background: "rgba(200,168,75,0.2)", color: "#7a6010" }}>
-                              ▶ Starta match
-                            </button>
-                          )}
-
-                          {isDone && !isEditing && (
-                            <div className="flex items-center justify-between mt-2">
-                              <p className="text-xs" style={{ color: "var(--text-muted)" }}>✓ Avslutad</p>
-                              {isLekledare && (
-                                <button
-                                  onClick={() => { setEditingMatchId(match.id); setEditScores({ a: match.score_a, b: match.score_b }); setEditError(null); }}
-                                  className="text-xs underline" style={{ color: "var(--blue-mid)" }}>
-                                  Rätta
-                                </button>
-                              )}
-                            </div>
-                          )}
-
-                          {isDone && isEditing && (
-                            <div className="mt-3 space-y-2">
-                              <div className="flex items-center gap-3 justify-center">
-                                <div className="flex items-center gap-1">
-                                  <button onClick={() => setEditScores((s) => ({ ...s, a: Math.max(0, s.a - 1) }))}
-                                    className="w-8 h-8 rounded-lg font-bold flex items-center justify-center"
-                                    style={{ background: "var(--border)", color: "var(--text-dark)" }}>–</button>
-                                  <span className="text-xl font-bold w-8 text-center tabular-nums" style={{ color: "var(--blue-deep)" }}>{editScores.a}</span>
-                                  <button onClick={() => setEditScores((s) => ({ ...s, a: s.a + 1 }))}
-                                    className="w-8 h-8 rounded-lg font-bold flex items-center justify-center"
-                                    style={{ background: "var(--blue-deep)", color: "white" }}>+</button>
-                                </div>
-                                <span style={{ color: "var(--border)" }}>–</span>
-                                <div className="flex items-center gap-1">
-                                  <button onClick={() => setEditScores((s) => ({ ...s, b: Math.max(0, s.b - 1) }))}
-                                    className="w-8 h-8 rounded-lg font-bold flex items-center justify-center"
-                                    style={{ background: "var(--border)", color: "var(--text-dark)" }}>–</button>
-                                  <span className="text-xl font-bold w-8 text-center tabular-nums" style={{ color: "var(--blue-deep)" }}>{editScores.b}</span>
-                                  <button onClick={() => setEditScores((s) => ({ ...s, b: s.b + 1 }))}
-                                    className="w-8 h-8 rounded-lg font-bold flex items-center justify-center"
-                                    style={{ background: "var(--blue-deep)", color: "white" }}>+</button>
-                                </div>
-                              </div>
-                              {editError && <p className="text-xs text-center" style={{ color: "var(--lingon)" }}>{editError}</p>}
-                              <div className="flex gap-2">
-                                <button onClick={saveEditedScore} disabled={savingEdit}
-                                  className="flex-1 py-1.5 rounded-lg text-xs font-semibold"
-                                  style={{ background: "var(--leaf)", color: "white" }}>
-                                  {savingEdit ? "..." : "Spara korrigering"}
-                                </button>
-                                <button onClick={() => { setEditingMatchId(null); setEditError(null); }}
-                                  className="flex-1 py-1.5 rounded-lg text-xs font-semibold"
-                                  style={{ background: "var(--border)", color: "var(--text-dark)" }}>
-                                  Avbryt
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                    {matches.filter((m) => m.round === round).map((match) => (
+                      <MatchCard key={match.id} match={match} teamMap={teamMap} isLekledare={isLekledare} editingMatchId={editingMatchId} editScores={editScores} editError={editError} savingEdit={savingEdit} setEditingMatchId={setEditingMatchId} setEditScores={setEditScores} setEditError={setEditError} updateScore={updateScore} setMatchStatus={setMatchStatus} saveEditedScore={saveEditedScore} />
+                    ))}
                   </div>
                 </div>
               ))

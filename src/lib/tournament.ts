@@ -131,6 +131,59 @@ export function generateBracketMatches(
   return matches;
 }
 
+type BracketMatch = {
+  id: string; tournament_id: string; team_a_id: string | null; team_b_id: string | null;
+  score_a: number; score_b: number; status: string; round: number; bracket_position: number | null;
+};
+type BracketTeam = { id: string; name: string; color?: string | null };
+
+export function transformMatchesForBracket(
+  matches: BracketMatch[],
+  teamMap: Map<string, BracketTeam>
+) {
+  const bracketMatches = matches.filter((m) => m.bracket_position != null);
+  const posToId = new Map<string, string>();
+  for (const m of bracketMatches) {
+    posToId.set(`${m.round}-${m.bracket_position}`, m.id);
+  }
+
+  return bracketMatches.map((m) => {
+    const nextPos = Math.ceil((m.bracket_position ?? 0) / 2);
+    const nextMatchId = posToId.get(`${m.round + 1}-${nextPos}`) ?? null;
+
+    const tA = m.team_a_id ? teamMap.get(m.team_a_id) : null;
+    const tB = m.team_b_id ? teamMap.get(m.team_b_id) : null;
+    const isDone = m.status === "completed";
+    const isBye = isDone && (!m.team_a_id || !m.team_b_id);
+    const winnerIsA = isDone && !isBye && m.score_a > m.score_b;
+    const winnerIsB = isDone && !isBye && m.score_b > m.score_a;
+
+    return {
+      id: m.id,
+      nextMatchId,
+      tournamentRoundText: `R${m.round}`,
+      startTime: "",
+      state: isDone ? "DONE" : m.status === "active" ? "SCORE_DONE" : "NO_PARTY",
+      participants: [
+        {
+          id: tA?.id ?? `tbd-a-${m.id}`,
+          name: tA?.name ?? (m.team_a_id ? "?" : "TBD"),
+          resultText: isDone && !isBye ? String(m.score_a) : isBye && m.team_a_id ? "BYE" : null,
+          isWinner: winnerIsA || (isBye && !!m.team_a_id),
+          status: null,
+        },
+        {
+          id: tB?.id ?? `tbd-b-${m.id}`,
+          name: tB?.name ?? (m.team_b_id ? "?" : "TBD"),
+          resultText: isDone && !isBye ? String(m.score_b) : isBye && m.team_b_id ? "BYE" : null,
+          isWinner: winnerIsB || (isBye && !!m.team_b_id),
+          status: null,
+        },
+      ],
+    };
+  });
+}
+
 // Returns indices of round-1 bye matches (team vs null) so the route can auto-complete them
 export function getByeMatchIndices(matches: MatchInsert[]): number[] {
   return matches
