@@ -129,7 +129,7 @@ export default function BetsPage() {
   if (guestLocked) {
     return (
       <div style={{ padding: "60px 24px", textAlign: "center" }}>
-        <p style={{ color: "var(--text-muted)", fontSize: "15px" }}>Klunkabörsen öppnar på festdagen.</p>
+        <p style={{ color: "var(--text-muted)", fontSize: "15px" }}>Betting öppnar på festdagen.</p>
       </div>
     );
   }
@@ -138,7 +138,7 @@ export default function BetsPage() {
     <div className="page-bg px-4 pt-6 pb-12 max-w-md mx-auto">
       <div className="pt-4 pb-5">
         <p className="page-subtitle mb-1">Satsa klunkar</p>
-        <h1 className="page-title">Klunkabörsen</h1>
+        <h1 className="page-title">Betting</h1>
         <div className="gold-rule" />
         <p className="text-sm mt-2" style={{ color: "var(--text-muted)" }}>
           Vinn klunkar. Drick klunkar. Lev livet.

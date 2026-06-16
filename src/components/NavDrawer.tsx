@@ -18,7 +18,7 @@ const mainNav = [
   { href: "/schema", label: "Schema", Icon: Calendar, locked: false },
   { href: "/turnering", label: "Turnering", Icon: Trophy, locked: true },
   { href: "/leaderboard", label: "Leaderboard", Icon: Star, locked: true },
-  { href: "/bets", label: "Klunkabörsen", Icon: Coins, locked: true },
+  { href: "/bets", label: "Betting", Icon: Coins, locked: true },
   { href: "/minnen", label: "Minnen", Icon: Camera, locked: true },
 ];
 

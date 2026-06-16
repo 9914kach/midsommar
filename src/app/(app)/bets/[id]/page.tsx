@@ -111,6 +111,13 @@ export default function BetDetailPage() {
     await load();
   }
 
+  async function deleteBet() {
+    if (!bet || !confirm("Ta bort vadet?")) return;
+    await supabase.from("bet_entries").delete().eq("bet_id", bet.id);
+    await supabase.from("bets").delete().eq("id", bet.id);
+    window.location.replace("/bets");
+  }
+
   if (loading) {
     return <div style={{ padding: "40px 24px", textAlign: "center", color: "var(--text-muted)" }}>Laddar...</div>;
   }
@@ -350,6 +357,18 @@ export default function BetDetailPage() {
               Återöppna vadet
             </button>
           )}
+
+          <button
+            onClick={deleteBet}
+            style={{
+              width: "100%", padding: "11px", borderRadius: "12px", border: "none",
+              background: "rgba(139,38,53,0.1)", color: "#8B2635",
+              fontWeight: 600, fontSize: "14px", cursor: "pointer",
+              fontFamily: "var(--font-inter), Inter, system-ui, sans-serif",
+            }}
+          >
+            Ta bort vad
+          </button>
         </div>
       )}
 
