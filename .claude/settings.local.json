@@ -36,7 +36,9 @@
       "Bash(xargs grep *)",
       "Bash(xargs cat *)",
       "Bash(grep -E \"\\\\.tsx$\")",
-      "Bash(gh run *)"
+      "Bash(gh run *)",
+      "Bash(npx next *)",
+      "Bash(taskkill /F /IM node.exe)"
     ]
   }
 }

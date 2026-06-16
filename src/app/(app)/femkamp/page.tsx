@@ -84,6 +84,8 @@ export default function FemkampPage() {
   const [events, setEvents] = useState<TEvent[]>([]);
   const [results, setResults] = useState<EventResult[]>([]);
   const [activeEventId, setActiveEventId] = useState<string | null>(null);
+  const [activeEventOpen, setActiveEventOpen] = useState(true);
+  const [femkampFinished, setFemkampFinished] = useState(false);
   const [draftResults, setDraftResults] = useState<Record<string, Record<string, string>>>({});
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -122,9 +124,10 @@ export default function FemkampPage() {
   // Edit mode (lekledare only)
   const [editMode, setEditMode] = useState(false);
 
-  // Reset / delete
+  // Reset / delete / finish
   const [resetting, setResetting] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [finishing, setFinishing] = useState(false);
 
   async function fetchData() {
     const { data: tournaments } = await supabase
@@ -142,16 +145,18 @@ export default function FemkampPage() {
     const t = tournaments[0];
     setTournament(t);
 
-    const [{ data: teamsData }, { data: eventsData }, { data: activeSetting }] = await Promise.all([
+    const [{ data: teamsData }, { data: eventsData }, { data: activeSetting }, { data: finishedSetting }] = await Promise.all([
       supabase.from("tournament_teams").select("id, name, color, official_team_id").eq("tournament_id", t.id),
       supabase.from("tournament_events").select("id, name, scoring_type, description, placement_points, sort_order").eq("tournament_id", t.id).order("sort_order").order("created_at"),
       supabase.from("app_settings").select("value").eq("key", "femkamp_active_event").maybeSingle(),
+      supabase.from("app_settings").select("value").eq("key", "femkamp_finished").maybeSingle(),
     ]);
 
     const fetchedTeams = (teamsData as TTeam[]) ?? [];
     setTeams(fetchedTeams);
     setEvents((eventsData as unknown as TEvent[]) ?? []);
     setActiveEventId(activeSetting?.value ?? null);
+    setFemkampFinished(!!finishedSetting?.value);
 
     if (fetchedTeams.length > 0) {
       const { data: res } = await supabase
@@ -167,6 +172,7 @@ export default function FemkampPage() {
   const teamsRef = useRef<TTeam[]>([]);
   const tournamentIdRef = useRef<string | null>(null);
   const activeEventLockedUntil = useRef<number>(0);
+  const femkampFinishedLockedUntil = useRef<number>(0);
   useEffect(() => { teamsRef.current = teams; }, [teams]);
   useEffect(() => { tournamentIdRef.current = tournament?.id ?? null; }, [tournament]);
 
@@ -177,16 +183,20 @@ export default function FemkampPage() {
     async function pollLive() {
       const tid = tournamentIdRef.current;
       if (!tid) return;
-      const [{ data: activeSetting }, { data: res }] = await Promise.all([
+      const [{ data: activeSetting }, { data: res }, { data: finishedSetting }] = await Promise.all([
         supabase.from("app_settings").select("value").eq("key", "femkamp_active_event").maybeSingle(),
         teamsRef.current.length > 0
           ? supabase.from("tournament_event_results").select("*").in("tournament_team_id", teamsRef.current.map((t) => t.id))
           : Promise.resolve({ data: null }),
+        supabase.from("app_settings").select("value").eq("key", "femkamp_finished").maybeSingle(),
       ]);
       if (Date.now() > activeEventLockedUntil.current) {
         setActiveEventId(activeSetting?.value ?? null);
       }
       if (res) setResults(res as EventResult[]);
+      if (Date.now() > femkampFinishedLockedUntil.current) {
+        setFemkampFinished(!!finishedSetting?.value);
+      }
     }
     const interval = setInterval(pollLive, 3000);
     return () => clearInterval(interval);
@@ -360,6 +370,22 @@ export default function FemkampPage() {
     await fetchData();
   }
 
+  async function finishFemkamp() {
+    if (!tournament) return;
+    if (!confirm("Avsluta femkampen och visa prispallen för alla gäster?")) return;
+    setFinishing(true);
+    setFemkampFinished(true);
+    femkampFinishedLockedUntil.current = Date.now() + 8000;
+    await supabase.from("app_settings").upsert({ key: "femkamp_finished", value: "1" });
+    setFinishing(false);
+  }
+
+  async function reopenFemkamp() {
+    setFemkampFinished(false);
+    femkampFinishedLockedUntil.current = Date.now() + 8000;
+    await supabase.from("app_settings").delete().eq("key", "femkamp_finished");
+  }
+
   async function reorderEvents(orderedIds: string[]) {
     if (!tournament) return;
     await Promise.all(
@@ -390,6 +416,7 @@ export default function FemkampPage() {
 
   async function setActiveEvent(eventId: string) {
     setActiveEventId(eventId);
+    setActiveEventOpen(true);
     activeEventLockedUntil.current = Date.now() + 5000;
     await fetch("/api/admin/femkamp/active-event", {
       method: "PATCH",
@@ -720,18 +747,105 @@ export default function FemkampPage() {
         )}
       </div>
 
-      {/* ── Active event ── */}
-      {activeEvent ? (
-        <div className="card p-4 mb-4" style={{ borderLeft: "4px solid var(--gold)" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
-            <span style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", background: "#e53e3e", flexShrink: 0 }} />
-            <p style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--gold)", margin: 0 }}>
-              Pågående gren
+      {/* ── Podium (finished) ── */}
+      {femkampFinished && (
+        <div className="mb-4">
+          <div style={{ textAlign: "center", marginBottom: "20px" }}>
+            <p style={{ fontSize: "32px", margin: "0 0 4px" }}>🏆</p>
+            <p style={{ fontFamily: "var(--font-playfair), 'Playfair Display', Georgia, serif", fontSize: "22px", fontWeight: 700, color: "var(--blue-deep)", margin: 0 }}>
+              Prispall
             </p>
           </div>
-          <p style={{ fontWeight: 700, fontSize: "18px", color: "var(--text-dark)", margin: 0 }}>{activeEvent.name}</p>
+
+          {ranking.length >= 3 ? (
+            <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "center", gap: "8px", marginBottom: "16px" }}>
+              {/* 2nd */}
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "5px" }}>
+                <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: ranking[1].team.color ?? "#888" }} />
+                <p style={{ fontSize: "12px", fontWeight: 700, color: "var(--text-dark)", margin: 0, textAlign: "center", lineHeight: 1.2 }}>{ranking[1].team.name}</p>
+                <p style={{ fontSize: "11px", color: "var(--text-muted)", margin: 0 }}>{ranking[1].total}p</p>
+                <div style={{ width: "100%", height: "56px", background: "rgba(74,127,173,0.15)", borderRadius: "8px 8px 0 0", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <span style={{ fontSize: "26px" }}>🥈</span>
+                </div>
+              </div>
+              {/* 1st */}
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "5px" }}>
+                <div style={{ width: "12px", height: "12px", borderRadius: "50%", background: ranking[0].team.color ?? "#888" }} />
+                <p style={{ fontSize: "14px", fontWeight: 800, color: "var(--text-dark)", margin: 0, textAlign: "center", lineHeight: 1.2 }}>{ranking[0].team.name}</p>
+                <p style={{ fontSize: "12px", color: "var(--gold)", fontWeight: 700, margin: 0 }}>{ranking[0].total}p</p>
+                <div style={{ width: "100%", height: "84px", background: "rgba(200,168,75,0.18)", borderRadius: "8px 8px 0 0", display: "flex", alignItems: "center", justifyContent: "center", border: "1.5px solid rgba(200,168,75,0.4)" }}>
+                  <span style={{ fontSize: "36px" }}>🥇</span>
+                </div>
+              </div>
+              {/* 3rd */}
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: "5px" }}>
+                <div style={{ width: "10px", height: "10px", borderRadius: "50%", background: ranking[2].team.color ?? "#888" }} />
+                <p style={{ fontSize: "12px", fontWeight: 700, color: "var(--text-dark)", margin: 0, textAlign: "center", lineHeight: 1.2 }}>{ranking[2].team.name}</p>
+                <p style={{ fontSize: "11px", color: "var(--text-muted)", margin: 0 }}>{ranking[2].total}p</p>
+                <div style={{ width: "100%", height: "40px", background: "rgba(139,38,53,0.1)", borderRadius: "8px 8px 0 0", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  <span style={{ fontSize: "20px" }}>🥉</span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="card p-4 mb-4">
+              {ranking.map(({ team, total }, i) => (
+                <div key={team.id} style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: i < ranking.length - 1 ? "8px" : 0 }}>
+                  <span style={{ fontSize: "18px" }}>{PLACE_MEDALS[i]}</span>
+                  <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: team.color ?? "#888", flexShrink: 0 }} />
+                  <span style={{ flex: 1, fontSize: "15px", fontWeight: 600 }}>{team.name}</span>
+                  <span style={{ fontSize: "14px", color: "var(--text-muted)" }}>{total}p</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {ranking.length > 3 && (
+            <div className="card p-4 mb-4" style={{ marginTop: "0" }}>
+              {ranking.slice(3).map(({ team, total }, i) => (
+                <div key={team.id} style={{ display: "flex", alignItems: "center", gap: "10px", marginBottom: i < ranking.length - 4 ? "8px" : 0 }}>
+                  <span style={{ fontSize: "14px", fontWeight: 700, width: "24px", textAlign: "right", color: "var(--text-muted)" }}>{i + 4}.</span>
+                  <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: team.color ?? "#888", flexShrink: 0 }} />
+                  <span style={{ flex: 1, fontSize: "14px", color: "var(--text-dark)" }}>{team.name}</span>
+                  <span style={{ fontSize: "14px", fontWeight: 600, color: "var(--text-muted)" }}>{total}p</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {isLekledare && (
+            <button
+              onClick={reopenFemkamp}
+              className="w-full py-3 rounded-xl text-sm font-semibold"
+              style={{ background: "rgba(27,63,110,0.08)", color: "var(--blue-deep)", border: "1px solid rgba(27,63,110,0.2)" }}
+            >
+              ↩ Återöppna femkampen
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ── Active event ── */}
+      {!femkampFinished && (activeEvent ? (
+        <div className="card p-4 mb-4" style={{ borderLeft: "4px solid var(--gold)" }}>
+          <button
+            type="button"
+            onClick={() => setActiveEventOpen((o) => !o)}
+            style={{ display: "flex", alignItems: "center", gap: "8px", width: "100%", background: "none", border: "none", padding: 0, cursor: "pointer", textAlign: "left" }}
+          >
+            <span style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", background: "#e53e3e", flexShrink: 0 }} />
+            <p style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--gold)", margin: 0, flex: 1 }}>
+              Pågående gren
+            </p>
+            <span style={{ fontSize: "18px", fontWeight: 700, color: "var(--text-dark)", flex: 2, textAlign: "left" }}>{activeEvent.name}</span>
+            <span style={{ fontSize: "16px", color: "var(--text-muted)", flexShrink: 0, transition: "transform 0.2s", transform: activeEventOpen ? "rotate(180deg)" : "rotate(0deg)", display: "inline-block" }}>
+              ▾
+            </span>
+          </button>
+          {activeEventOpen && (
+          <>
           {activeEvent.description && (
-            <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "4px 0 0", fontStyle: "italic" }}>{activeEvent.description}</p>
+            <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "8px 0 0", fontStyle: "italic" }}>{activeEvent.description}</p>
           )}
           {activePlacementPts && (
             <div style={{ display: "flex", gap: "6px", flexWrap: "wrap", marginTop: "8px" }}>
@@ -812,6 +926,8 @@ export default function FemkampPage() {
               </div>
             </div>
           )}
+          </>
+          )}
         </div>
       ) : (
         <div className="card p-4 mb-4" style={{ borderLeft: "4px solid var(--border)" }}>
@@ -819,9 +935,10 @@ export default function FemkampPage() {
             {isLekledare ? "Tryck på en gren nedan för att starta den." : "Ingen gren är aktiv just nu."}
           </p>
         </div>
-      )}
+      ))}
 
-      {/* ── Events list ── */}
+      {/* ── Events list + tools (hidden when finished) ── */}
+      {!femkampFinished && (<>
       {isLekledare && (
         <p style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)", margin: "0 0 10px" }}>
           {editMode ? "Grenar — dra för att ändra ordning" : "Grenar"}
@@ -954,6 +1071,18 @@ export default function FemkampPage() {
           </div>
         </SortableContext>
       </DndContext>
+
+      {/* ── Avsluta femkamp ── */}
+      {isLekledare && !editMode && (
+        <button
+          onClick={finishFemkamp}
+          disabled={finishing}
+          className="w-full mt-5 py-3 rounded-xl text-sm font-semibold"
+          style={{ background: "rgba(200,168,75,0.15)", color: "var(--gold)", border: "1px solid rgba(200,168,75,0.4)" }}
+        >
+          {finishing ? "Avslutar..." : "🏆 Avsluta femkampen"}
+        </button>
+      )}
 
       {/* ── Lekledare tools ── */}
       {isLekledare && editMode && (
@@ -1097,6 +1226,7 @@ export default function FemkampPage() {
           )}
         </div>
       )}
+      </>)}
     </div>
   );
 }

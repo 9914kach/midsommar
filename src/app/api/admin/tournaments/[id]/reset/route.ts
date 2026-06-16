@@ -26,7 +26,7 @@ export async function POST(
       const { error: resultsErr } = await supabase.from("tournament_event_results").delete().in("tournament_team_id", teamIds);
       if (resultsErr) return NextResponse.json({ error: resultsErr.message }, { status: 500 });
     }
-    await supabase.from("app_settings").delete().eq("key", "femkamp_active_event");
+    await supabase.from("app_settings").delete().in("key", ["femkamp_active_event", "femkamp_finished"]);
     return NextResponse.json({ ok: true });
   }
 

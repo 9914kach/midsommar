@@ -53,7 +53,7 @@ export async function DELETE(
     await supabase.from("tournament_team_members").delete().in("tournament_team_id", teamIds);
   }
   await supabase.from("tournament_teams").delete().eq("tournament_id", id);
-  await supabase.from("app_settings").delete().eq("key", "femkamp_active_event");
+  await supabase.from("app_settings").delete().in("key", ["femkamp_active_event", "femkamp_finished"]);
 
   const { error } = await supabase.from("tournaments").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
