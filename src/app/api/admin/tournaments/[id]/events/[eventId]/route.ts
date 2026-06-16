@@ -7,9 +7,10 @@ export async function PATCH(
 ) {
   const { eventId } = await params;
   const body = await request.json();
-  const payload: { name?: string; scoring_type?: string } = {};
+  const payload: { name?: string; scoring_type?: string; placement_points?: string | null } = {};
   if (body.name !== undefined) payload.name = body.name;
   if (body.scoring_type !== undefined) payload.scoring_type = body.scoring_type;
+  if (body.placement_points !== undefined) payload.placement_points = body.placement_points || null;
 
   const { data, error } = await supabase
     .from("tournament_events")

@@ -100,9 +100,9 @@ export type Database = {
         Relationships: [];
       };
       tournament_events: {
-        Row: { id: string; tournament_id: string; name: string; scoring_type: string; description: string | null; created_at: string };
-        Insert: { id?: string; tournament_id: string; name: string; scoring_type?: string; description?: string | null };
-        Update: { name?: string; scoring_type?: string; description?: string | null };
+        Row: { id: string; tournament_id: string; name: string; scoring_type: string; description: string | null; placement_points: string | null; created_at: string };
+        Insert: { id?: string; tournament_id: string; name: string; scoring_type?: string; description?: string | null; placement_points?: string | null };
+        Update: { name?: string; scoring_type?: string; description?: string | null; placement_points?: string | null };
         Relationships: [];
       };
       tournament_event_results: {

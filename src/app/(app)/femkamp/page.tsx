@@ -6,10 +6,18 @@ import { useUser } from "@/lib/useUser";
 
 type Tournament = { id: string; name: string; game: string; status: string };
 type TTeam = { id: string; name: string; color: string | null };
-type TEvent = { id: string; name: string; scoring_type: string; description: string | null };
+type TEvent = { id: string; name: string; scoring_type: string; description: string | null; placement_points: string | null };
 type EventResult = { event_id: string; tournament_team_id: string; value: number | null };
 
 const TEAM_COLORS = ["#C8A84B", "#1B3F6E", "#3D6B3A", "#8B2635", "#5B4A8A", "#C45000", "#2A7A7A", "#6B4423"];
+const PLACE_MEDALS = ["🥇", "🥈", "🥉", "4.", "5.", "6.", "7.", "8."];
+
+function parsePlacementPoints(raw: string | null): number[] | null {
+  if (!raw) return null;
+  const pts = raw.split(",").map((v) => parseFloat(v.trim()));
+  if (pts.some(isNaN)) return null;
+  return pts;
+}
 
 function computeRanking(teams: TTeam[], events: TEvent[], results: EventResult[]) {
   const totals: Record<string, number> = {};
@@ -17,7 +25,18 @@ function computeRanking(teams: TTeam[], events: TEvent[], results: EventResult[]
   for (const evt of events) {
     const evtResults = results.filter((r) => r.event_id === evt.id && r.value != null);
     if (evtResults.length === 0) continue;
-    if (evt.scoring_type === "points") {
+    const placementPts = parsePlacementPoints(evt.placement_points);
+    if (placementPts) {
+      // Rank teams by raw value, apply placement points
+      const sorted = [...evtResults].sort((a, b) =>
+        evt.scoring_type === "time"
+          ? (a.value ?? 0) - (b.value ?? 0)   // time: lower is better
+          : (b.value ?? 0) - (a.value ?? 0)   // points: higher is better
+      );
+      sorted.forEach((r, i) => {
+        totals[r.tournament_team_id] = (totals[r.tournament_team_id] ?? 0) + (placementPts[i] ?? 0);
+      });
+    } else if (evt.scoring_type === "points") {
       for (const r of evtResults) totals[r.tournament_team_id] = (totals[r.tournament_team_id] ?? 0) + (r.value ?? 0);
     } else {
       const sorted = [...evtResults].sort((a, b) => (a.value ?? 0) - (b.value ?? 0));
@@ -44,8 +63,12 @@ export default function FemkampPage() {
   const [newEventName, setNewEventName] = useState("");
   const [newEventDesc, setNewEventDesc] = useState("");
   const [newEventType, setNewEventType] = useState<"points" | "time">("points");
+  const [newEventPlacements, setNewEventPlacements] = useState<string[]>([]);
   const [addingEvent, setAddingEvent] = useState(false);
   const [savingResults, setSavingResults] = useState<string | null>(null);
+  // Edit placement points per event
+  const [editingPlacements, setEditingPlacements] = useState<string | null>(null); // eventId
+  const [draftPlacements, setDraftPlacements] = useState<string[]>([]);
 
   // Add team
   const [showAddTeam, setShowAddTeam] = useState(false);
@@ -122,15 +145,29 @@ export default function FemkampPage() {
     e.preventDefault();
     if (!tournament || !newEventName.trim()) return;
     setAddingEvent(true);
+    const placementStr = newEventPlacements.filter((v) => v !== "").join(",") || null;
     await fetch(`/api/admin/tournaments/${tournament.id}/events`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newEventName.trim(), scoring_type: newEventType, description: newEventDesc.trim() || null }),
+      body: JSON.stringify({ name: newEventName.trim(), scoring_type: newEventType, description: newEventDesc.trim() || null, placement_points: placementStr }),
     });
     setNewEventName("");
     setNewEventDesc("");
+    setNewEventPlacements([]);
     setAddingEvent(false);
     setShowAddEvent(false);
+    await fetchData();
+  }
+
+  async function savePlacements(eventId: string) {
+    if (!tournament) return;
+    const placementStr = draftPlacements.filter((v) => v !== "").join(",") || null;
+    await fetch(`/api/admin/tournaments/${tournament.id}/events/${eventId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ placement_points: placementStr }),
+    });
+    setEditingPlacements(null);
     await fetchData();
   }
 
@@ -284,64 +321,144 @@ export default function FemkampPage() {
       )}
 
       <div className="space-y-4">
-        {events.map((evt) => (
-          <div key={evt.id} className="card p-4">
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "12px" }}>
-              <div>
-                <p style={{ fontWeight: 600, fontSize: "15px", color: "var(--text-dark)", margin: 0 }}>{evt.name}</p>
-                <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "2px 0 0" }}>
-                  {evt.scoring_type === "points" ? "Poäng — högst vinner" : "Tid — lägst vinner"}
-                </p>
-                {evt.description && (
-                  <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "4px 0 0", fontStyle: "italic" }}>
-                    {evt.description}
-                  </p>
+        {events.map((evt) => {
+          const placementPts = parsePlacementPoints(evt.placement_points);
+          const isEditingThis = editingPlacements === evt.id;
+
+          // Compute live preview of which team lands where based on draft/saved values
+          const evtDraftResults = teams.map((t) => {
+            const val = getResultValue(evt.id, t.id);
+            return { team: t, raw: val !== "" ? parseFloat(val) : null };
+          }).filter((r) => r.raw !== null);
+          const sorted = [...evtDraftResults].sort((a, b) =>
+            evt.scoring_type === "time" ? (a.raw ?? 0) - (b.raw ?? 0) : (b.raw ?? 0) - (a.raw ?? 0)
+          );
+          const rankMap: Record<string, number> = {};
+          sorted.forEach((r, i) => { rankMap[r.team.id] = i; });
+
+          return (
+            <div key={evt.id} className="card p-4">
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "8px" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontWeight: 600, fontSize: "15px", color: "var(--text-dark)", margin: 0 }}>{evt.name}</p>
+                  {evt.description && (
+                    <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "3px 0 0", fontStyle: "italic" }}>
+                      {evt.description}
+                    </p>
+                  )}
+                  {/* Placement points legend */}
+                  {placementPts && (
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "6px" }}>
+                      {placementPts.map((pts, i) => (
+                        <span key={i} style={{
+                          fontSize: "11px", padding: "2px 8px", borderRadius: "20px",
+                          background: "rgba(200,168,75,0.12)", color: "var(--gold)", fontWeight: 600,
+                        }}>
+                          {PLACE_MEDALS[i]} {pts}p
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {isLekledare && (
+                  <div style={{ display: "flex", gap: "6px", flexShrink: 0, marginLeft: "8px" }}>
+                    <button
+                      onClick={() => {
+                        if (isEditingThis) { setEditingPlacements(null); return; }
+                        setDraftPlacements(placementPts ? placementPts.map(String) : Array(teams.length).fill(""));
+                        setEditingPlacements(evt.id);
+                      }}
+                      style={{ fontSize: "12px", color: "var(--gold)", background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}
+                    >
+                      {isEditingThis ? "Avbryt" : "Poäng"}
+                    </button>
+                    <button onClick={() => deleteEvent(evt.id)} style={{ fontSize: "12px", color: "var(--lingon)", background: "none", border: "none", cursor: "pointer", padding: "4px 6px" }}>
+                      Ta bort
+                    </button>
+                  </div>
                 )}
               </div>
+
+              {/* Edit placement points inline */}
+              {isEditingThis && (
+                <div style={{ background: "rgba(200,168,75,0.06)", borderRadius: "10px", padding: "12px", marginBottom: "12px" }}>
+                  <p style={{ fontSize: "11px", fontWeight: 600, color: "var(--gold)", letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 10px" }}>
+                    Poäng per placering
+                  </p>
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                    {Array.from({ length: teams.length }).map((_, i) => (
+                      <div key={i} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                        <span style={{ fontSize: "14px", width: "28px", flexShrink: 0 }}>{PLACE_MEDALS[i]}</span>
+                        <input
+                          type="number" min="0" step="0.5" placeholder="0"
+                          value={draftPlacements[i] ?? ""}
+                          onChange={(e) => {
+                            const next = [...draftPlacements];
+                            next[i] = e.target.value;
+                            setDraftPlacements(next);
+                          }}
+                          style={{ width: "80px", padding: "6px 10px", borderRadius: "8px", border: "1px solid var(--border)", background: "var(--birch)", fontSize: "14px", textAlign: "right", color: "var(--blue-deep)" }}
+                        />
+                        <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>poäng</span>
+                      </div>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => savePlacements(evt.id)}
+                    className="mt-3 w-full py-2 rounded-lg text-sm font-semibold"
+                    style={{ background: "var(--gold)", color: "#1B3F6E" }}
+                  >
+                    Spara poängfördelning
+                  </button>
+                </div>
+              )}
+
+              {/* Team result inputs */}
+              <div className="space-y-2">
+                {teams.map((t) => {
+                  const val = getResultValue(evt.id, t.id);
+                  const rank = rankMap[t.id];
+                  const earnedPts = placementPts && rank !== undefined ? (placementPts[rank] ?? 0) : null;
+                  return (
+                    <div key={t.id} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: t.color ?? "#888", flexShrink: 0 }} />
+                      <span style={{ flex: 1, fontSize: "14px", color: "var(--text-dark)" }}>{t.name}</span>
+                      {earnedPts !== null && val !== "" && (
+                        <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--gold)", minWidth: "32px", textAlign: "right" }}>
+                          {earnedPts}p
+                        </span>
+                      )}
+                      {isLekledare ? (
+                        <input
+                          type="number" min="0" step="0.01" placeholder="—"
+                          value={val}
+                          onChange={(e) => setDraftValue(evt.id, t.id, e.target.value)}
+                          className="w-20 px-2 py-1.5 rounded-lg border text-sm text-right outline-none tabular-nums"
+                          style={{ borderColor: "var(--border)", background: "var(--birch)", color: "var(--blue-deep)" }}
+                        />
+                      ) : (
+                        <span style={{ fontSize: "14px", fontWeight: 600, color: val ? "var(--blue-deep)" : "var(--text-muted)" }}>
+                          {val || "—"}
+                        </span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
               {isLekledare && (
-                <button onClick={() => deleteEvent(evt.id)} style={{ fontSize: "12px", color: "var(--lingon)", background: "none", border: "none", cursor: "pointer", padding: "4px 8px" }}>
-                  Ta bort
+                <button
+                  onClick={() => saveResults(evt.id)}
+                  disabled={savingResults === evt.id}
+                  className="mt-3 w-full py-2 rounded-lg text-sm font-semibold"
+                  style={{ background: "rgba(27,63,110,0.1)", color: "var(--blue-deep)" }}
+                >
+                  {savingResults === evt.id ? "Sparar..." : "Spara resultat"}
                 </button>
               )}
             </div>
-
-            <div className="space-y-2">
-              {teams.map((t) => {
-                const val = getResultValue(evt.id, t.id);
-                return (
-                  <div key={t.id} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                    <div style={{ width: "8px", height: "8px", borderRadius: "50%", background: t.color ?? "#888", flexShrink: 0 }} />
-                    <span style={{ flex: 1, fontSize: "14px", color: "var(--text-dark)" }}>{t.name}</span>
-                    {isLekledare ? (
-                      <input
-                        type="number" min="0" step="0.01" placeholder="—"
-                        value={val}
-                        onChange={(e) => setDraftValue(evt.id, t.id, e.target.value)}
-                        className="w-20 px-2 py-1.5 rounded-lg border text-sm text-right outline-none tabular-nums"
-                        style={{ borderColor: "var(--border)", background: "var(--birch)", color: "var(--blue-deep)" }}
-                      />
-                    ) : (
-                      <span style={{ fontSize: "14px", fontWeight: 600, color: val ? "var(--blue-deep)" : "var(--text-muted)" }}>
-                        {val || "—"}
-                      </span>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
-            {isLekledare && (
-              <button
-                onClick={() => saveResults(evt.id)}
-                disabled={savingResults === evt.id}
-                className="mt-3 w-full py-2 rounded-lg text-sm font-semibold"
-                style={{ background: "rgba(27,63,110,0.1)", color: "var(--blue-deep)" }}
-              >
-                {savingResults === evt.id ? "Sparar..." : "Spara resultat"}
-              </button>
-            )}
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Lägg till gren */}
@@ -349,7 +466,10 @@ export default function FemkampPage() {
         <div className="mt-5">
           {!showAddEvent ? (
             <button
-              onClick={() => setShowAddEvent(true)}
+              onClick={() => {
+                setNewEventPlacements(Array(Math.max(teams.length, 3)).fill(""));
+                setShowAddEvent(true);
+              }}
               className="w-full py-3 rounded-xl text-sm font-semibold"
               style={{ background: "rgba(200,168,75,0.12)", color: "var(--gold)", border: "1px solid rgba(200,168,75,0.3)" }}
             >
@@ -385,6 +505,32 @@ export default function FemkampPage() {
                   </button>
                 ))}
               </div>
+
+              {/* Placement points */}
+              <div>
+                <p style={{ fontSize: "11px", fontWeight: 600, color: "var(--gold)", letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 8px" }}>
+                  Poäng per placering
+                </p>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  {newEventPlacements.map((v, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <span style={{ fontSize: "14px", width: "28px", flexShrink: 0 }}>{PLACE_MEDALS[i]}</span>
+                      <input
+                        type="number" min="0" step="0.5" placeholder="0"
+                        value={v}
+                        onChange={(e) => {
+                          const next = [...newEventPlacements];
+                          next[i] = e.target.value;
+                          setNewEventPlacements(next);
+                        }}
+                        style={{ width: "80px", padding: "6px 10px", borderRadius: "8px", border: "1px solid var(--border)", background: "var(--birch)", fontSize: "14px", textAlign: "right", color: "var(--blue-deep)" }}
+                      />
+                      <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>poäng</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
               <div style={{ display: "flex", gap: "8px" }}>
                 <button type="submit" disabled={addingEvent} className="btn-gold text-sm py-2" style={{ flex: 1 }}>
                   {addingEvent ? "..." : "Lägg till gren"}

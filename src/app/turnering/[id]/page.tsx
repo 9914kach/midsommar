@@ -22,7 +22,7 @@ type Match = {
 };
 type OfficialTeam = { id: string; name: string; color: string; emoji: string };
 type AppUser = { id: string; username: string };
-type TEvent = { id: string; tournament_id: string; name: string; scoring_type: string; description: string | null };
+type TEvent = { id: string; tournament_id: string; name: string; scoring_type: string; description: string | null; placement_points: string | null };
 type EventResult = { event_id: string; tournament_team_id: string; value: number | null };
 
 const statusBg: Record<string, string> = {
