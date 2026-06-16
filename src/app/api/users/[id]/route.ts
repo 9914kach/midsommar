@@ -7,7 +7,9 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const callerRole = request.cookies.get("midsommar_role")?.value as Role;
-  if (!hasRole(callerRole, "värd")) {
+  const adminCookie = request.cookies.get("midsommar_admin")?.value;
+  const isAdmin = callerRole === "admin" || adminCookie === process.env.ADMIN_PASSWORD;
+  if (!isAdmin && !hasRole(callerRole, "värd")) {
     return NextResponse.json({ error: "Ingen behörighet" }, { status: 403 });
   }
 
