@@ -67,6 +67,18 @@ export function NavDrawer({ children }: { children: React.ReactNode }) {
     setMounted(true);
   }, []);
 
+  // Sync localStorage → Supabase once me.id is available
+  useEffect(() => {
+    if (!me.id || !mounted) return;
+    const local = Number(localStorage.getItem("drink_units") ?? "0");
+    if (local > 0) {
+      supabase.from("app_settings").upsert(
+        { key: `drink_units_${me.id}`, value: String(local) },
+        { onConflict: "key" }
+      );
+    }
+  }, [me.id, mounted]);
+
   function addDrink() {
     const next = drinks + 1;
     setDrinks(next);
