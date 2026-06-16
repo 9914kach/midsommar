@@ -4,6 +4,9 @@ import { useState } from "react";
 import { dryckerlekar, type Dryckerslek } from "@/lib/data/dryckerlekar";
 import { ChevronRight } from "lucide-react";
 
+type Category = "Alla" | "Kort" | "Tärning" | "Musik" | "Övrigt" | "Inga krav";
+const CATEGORIES: Category[] = ["Alla", "Inga krav", "Kort", "Tärning", "Musik", "Övrigt"];
+
 const difficultyStyle: Record<string, { bg: string; color: string }> = {
   Lätt:  { bg: "rgba(61,107,58,0.10)", color: "#3D6B3A" },
   Medel: { bg: "rgba(200,168,75,0.15)", color: "#7a5f00" },
@@ -43,12 +46,15 @@ function GameCard({ game }: { game: Dryckerslek }) {
             }}>
               {game.description}
             </p>
-            <div style={{ display: "flex", gap: "16px" }}>
+            <div style={{ display: "flex", gap: "10px", flexWrap: "wrap", alignItems: "center" }}>
               <span style={{ fontSize: "11px", color: "var(--blue-mid)", fontFamily: "var(--font-inter), Inter, system-ui, sans-serif" }}>
                 {game.players} spelare
               </span>
               <span style={{ fontSize: "11px", color: "var(--blue-mid)", fontFamily: "var(--font-inter), Inter, system-ui, sans-serif" }}>
                 {game.time}
+              </span>
+              <span className="tag" style={{ fontSize: "10px", padding: "2px 8px" }}>
+                {game.category}
               </span>
             </div>
           </div>
@@ -118,12 +124,14 @@ function GameCard({ game }: { game: Dryckerslek }) {
 }
 
 export default function DryckerlekarPage() {
-  const [filter, setFilter] = useState<"alla" | "Lätt" | "Medel" | "Svår">("alla");
+  const [difficulty, setDifficulty] = useState<"alla" | "Lätt" | "Medel" | "Svår">("alla");
+  const [category, setCategory] = useState<Category>("Alla");
 
-  const filtered =
-    filter === "alla"
-      ? dryckerlekar
-      : dryckerlekar.filter((g) => g.difficulty === filter);
+  const filtered = dryckerlekar.filter((g) => {
+    const diffOk = difficulty === "alla" || g.difficulty === difficulty;
+    const catOk = category === "Alla" || g.category === category;
+    return diffOk && catOk;
+  });
 
   return (
     <div className="page-bg" style={{ paddingBottom: "48px" }}>
@@ -136,18 +144,39 @@ export default function DryckerlekarPage() {
       </div>
 
       <div style={{ maxWidth: "480px", margin: "0 auto", padding: "0 20px" }}>
+        {/* Category filter */}
+        <div style={{ display: "flex", gap: "8px", overflowX: "auto", paddingBottom: "8px", marginBottom: "8px" }}>
+          {CATEGORIES.map((c) => (
+            <button
+              key={c}
+              onClick={() => setCategory(c)}
+              className={`tag${category === c ? " tag-active" : ""}`}
+              style={{ border: "none", cursor: "pointer", padding: "5px 12px", flexShrink: 0 }}
+            >
+              {c}
+            </button>
+          ))}
+        </div>
+
+        {/* Difficulty filter */}
         <div style={{ display: "flex", gap: "8px", marginBottom: "16px" }}>
           {(["alla", "Lätt", "Medel", "Svår"] as const).map((f) => (
             <button
               key={f}
-              onClick={() => setFilter(f)}
-              className={`tag${filter === f ? " tag-active" : ""}`}
+              onClick={() => setDifficulty(f)}
+              className={`tag${difficulty === f ? " tag-active" : ""}`}
               style={{ border: "none", cursor: "pointer", padding: "5px 12px" }}
             >
               {f}
             </button>
           ))}
         </div>
+
+        {filtered.length === 0 && (
+          <p style={{ textAlign: "center", color: "var(--text-muted)", fontSize: "14px", marginTop: "32px" }}>
+            Inga lekar matchar filtret.
+          </p>
+        )}
 
         {filtered.map((game) => (
           <GameCard key={game.id} game={game} />
