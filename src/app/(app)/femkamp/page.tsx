@@ -744,7 +744,7 @@ export default function FemkampPage() {
           )}
 
           {/* Current event scoreboard */}
-          {activeRanking.length > 0 && (
+          {!isLekledare && activeRanking.length > 0 && (
             <div style={{ marginTop: "14px", borderTop: "1px solid var(--border)", paddingTop: "12px" }}>
               <p style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", letterSpacing: "0.08em", textTransform: "uppercase", margin: "0 0 8px" }}>
                 Ställning i grenen
