@@ -103,21 +103,11 @@ export default function BetsPage() {
   async function submitBet() {
     if (!desc.trim() || !me.id) return;
     setSubmitting(true);
-    const { data: bet } = await supabase
-      .from("bets")
-      .insert({ description: desc.trim(), created_by: me.id })
-      .select()
-      .single();
-
-    if (bet) {
-      await supabase.from("bet_entries").insert({
-        bet_id: bet.id,
-        user_id: me.id,
-        side,
-        klunkar,
-      });
-    }
-
+    await fetch("/api/bets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ description: desc.trim(), side, klunkar }),
+    });
     setDesc("");
     setSide("for");
     setKlunkar(3);

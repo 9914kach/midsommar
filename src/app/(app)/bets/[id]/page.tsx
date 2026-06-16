@@ -81,11 +81,10 @@ export default function BetDetailPage() {
   async function joinBet() {
     if (!me.id || !bet) return;
     setSubmitting(true);
-    await supabase.from("bet_entries").insert({
-      bet_id: bet.id,
-      user_id: me.id,
-      side,
-      klunkar,
+    await fetch(`/api/bets/${bet.id}/entries`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ side, klunkar }),
     });
     setSubmitting(false);
     await load();
@@ -94,20 +93,32 @@ export default function BetDetailPage() {
   async function resolve(winner: "for" | "against") {
     if (!bet) return;
     setResolving(true);
-    await supabase.from("bets").update({ status: "resolved", winner_side: winner }).eq("id", bet.id);
+    await fetch(`/api/bets/${bet.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "resolved", winner_side: winner }),
+    });
     setResolving(false);
     await load();
   }
 
   async function closeBet() {
     if (!bet) return;
-    await supabase.from("bets").update({ status: "closed" }).eq("id", bet.id);
+    await fetch(`/api/bets/${bet.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "closed" }),
+    });
     await load();
   }
 
   async function reopenBet() {
     if (!bet) return;
-    await supabase.from("bets").update({ status: "open", winner_side: null }).eq("id", bet.id);
+    await fetch(`/api/bets/${bet.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status: "open", winner_side: null }),
+    });
     await load();
   }
 
