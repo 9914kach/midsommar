@@ -249,6 +249,7 @@ export default function TurneringDetailPage({ params }: { params: Promise<{ id: 
   // Multi-event state
   const [showAddEvent, setShowAddEvent] = useState(false);
   const [newEventName, setNewEventName] = useState("");
+  const [newEventDesc, setNewEventDesc] = useState("");
   const [newEventType, setNewEventType] = useState<"points" | "time">("points");
   const [addingEvent, setAddingEvent] = useState(false);
   const [draftResults, setDraftResults] = useState<Record<string, Record<string, string>>>({}); // eventId → teamId → value string
@@ -347,9 +348,10 @@ export default function TurneringDetailPage({ params }: { params: Promise<{ id: 
     await fetch(`/api/admin/tournaments/${id}/events`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: newEventName.trim(), scoring_type: newEventType }),
+      body: JSON.stringify({ name: newEventName.trim(), scoring_type: newEventType, description: newEventDesc.trim() || null }),
     });
     setNewEventName("");
+    setNewEventDesc("");
     setAddingEvent(false);
     setShowAddEvent(false);
     await fetchData();
@@ -697,6 +699,14 @@ export default function TurneringDetailPage({ params }: { params: Promise<{ id: 
                       onChange={(e) => setNewEventName(e.target.value)}
                       className="w-full px-3 py-2 rounded-lg border text-sm outline-none"
                       style={{ borderColor: "var(--border)", background: "var(--birch)" }} />
+                    <textarea
+                      placeholder="Regler (valfritt)"
+                      value={newEventDesc}
+                      onChange={(e) => setNewEventDesc(e.target.value)}
+                      rows={2}
+                      className="w-full px-3 py-2 rounded-lg border text-sm outline-none resize-none"
+                      style={{ borderColor: "var(--border)", background: "var(--birch)" }}
+                    />
                     <div>
                       <p className="text-xs mb-2" style={{ color: "var(--text-muted)" }}>Poängtyp</p>
                       <div className="flex gap-2">
@@ -788,24 +798,39 @@ export default function TurneringDetailPage({ params }: { params: Promise<{ id: 
         {/* ── MULTI_EVENT VIEW ── */}
         {format === "multi_event" && (
           <div className="space-y-5">
-            {/* Overall ranking */}
-            {teams.length > 0 && events.length > 0 && (
+            {/* Overall ranking — alltid synlig när det finns lag */}
+            {teams.length > 0 && (
               <div className="card p-4">
                 <p className="text-xs font-semibold uppercase mb-3" style={{ color: "var(--text-muted)", letterSpacing: "0.08em" }}>
-                  Totalt
+                  Poängställning
                 </p>
-                <div className="space-y-2">
-                  {ranking.map(({ team, total }, i) => (
-                    <div key={team.id} className="flex items-center gap-3">
-                      <span className="text-sm font-bold w-5 text-right tabular-nums" style={{ color: i === 0 ? "var(--gold)" : "var(--text-muted)" }}>
-                        {i + 1}
-                      </span>
-                      <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: team.color ?? "#888" }} />
-                      <span className="flex-1 text-sm font-semibold" style={{ color: "var(--text-dark)" }}>{team.name}</span>
-                      <span className="text-sm font-bold tabular-nums" style={{ color: "var(--blue-deep)" }}>{total} p</span>
-                    </div>
-                  ))}
-                </div>
+                {ranking.length > 0 ? (
+                  <div className="space-y-2">
+                    {ranking.map(({ team, total }, i) => (
+                      <div key={team.id} className="flex items-center gap-3">
+                        <span className="text-sm font-bold w-5 text-right tabular-nums" style={{ color: i === 0 ? "var(--gold)" : "var(--text-muted)" }}>
+                          {i + 1}
+                        </span>
+                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: team.color ?? "#888" }} />
+                        <span className="flex-1 text-sm font-semibold" style={{ color: "var(--text-dark)" }}>{team.name}</span>
+                        <span className="text-sm font-bold tabular-nums" style={{ color: "var(--blue-deep)" }}>
+                          {total > 0 ? `${total} p` : "–"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {teams.map((team, i) => (
+                      <div key={team.id} className="flex items-center gap-3">
+                        <span className="text-sm font-bold w-5 text-right tabular-nums" style={{ color: "var(--text-muted)" }}>{i + 1}</span>
+                        <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: team.color ?? "#888" }} />
+                        <span className="flex-1 text-sm font-semibold" style={{ color: "var(--text-dark)" }}>{team.name}</span>
+                        <span className="text-sm tabular-nums" style={{ color: "var(--text-muted)" }}>–</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
@@ -817,7 +842,7 @@ export default function TurneringDetailPage({ params }: { params: Promise<{ id: 
             {/* No events yet */}
             {teams.length > 0 && events.length === 0 && (
               <div className="card p-8 text-center" style={{ color: "var(--text-muted)" }}>
-                {isLekledare ? "Tryck '+ Lägg till gren' för att lägga till grenar" : "Inga grenar ännu"}
+                {isLekledare ? "Lägg till grenar via knappen ovan" : "Inga grenar ännu"}
               </div>
             )}
 
@@ -833,6 +858,11 @@ export default function TurneringDetailPage({ params }: { params: Promise<{ id: 
                       <p className="text-xs" style={{ color: "var(--text-muted)" }}>
                         {evt.scoring_type === "points" ? "Poäng (högst vinner)" : "Tid (lägst vinner)"}
                       </p>
+                      {evt.description && (
+                        <p className="text-xs mt-1" style={{ color: "var(--text-muted)", fontStyle: "italic" }}>
+                          {evt.description}
+                        </p>
+                      )}
                     </div>
                     {isLekledare && (
                       <button onClick={() => deleteEvent(evt.id)} className="text-xs" style={{ color: "var(--lingon)" }}>
@@ -882,6 +912,17 @@ export default function TurneringDetailPage({ params }: { params: Promise<{ id: 
                 </div>
               );
             })}
+
+            {/* Snabb "Lägg till gren"-knapp i botten av vyn för lekledare */}
+            {isLekledare && teams.length > 0 && (
+              <button
+                onClick={() => { setShowAddEvent(true); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+                className="w-full py-3 rounded-xl text-sm font-semibold"
+                style={{ background: "rgba(200,168,75,0.12)", color: "var(--gold)", border: "1px solid rgba(200,168,75,0.3)" }}
+              >
+                + Lägg till gren
+              </button>
+            )}
           </div>
         )}
 

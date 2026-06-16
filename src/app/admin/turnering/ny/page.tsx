@@ -7,7 +7,7 @@ export default function NyTurneringPage() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [game, setGame] = useState("");
-  const [format, setFormat] = useState<"bracket" | "round_robin" | "free">("round_robin");
+  const [format, setFormat] = useState<"bracket" | "round_robin" | "free" | "multi_event">("round_robin");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -70,6 +70,7 @@ export default function NyTurneringPage() {
                 { value: "round_robin", label: "Round Robin", desc: "Alla möter alla" },
                 { value: "bracket", label: "Bracket", desc: "Utslagsspel" },
                 { value: "free", label: "Fri", desc: "Manuella matcher" },
+                { value: "multi_event", label: "Femkamp / Mångkamp", desc: "Flera grenar, totalpoäng avgör" },
               ].map((f) => (
                 <label
                   key={f.value}
@@ -81,7 +82,7 @@ export default function NyTurneringPage() {
                     name="format"
                     value={f.value}
                     checked={format === f.value}
-                    onChange={() => setFormat(f.value as "bracket" | "round_robin" | "free")}
+                    onChange={() => setFormat(f.value as "bracket" | "round_robin" | "free" | "multi_event")}
                     className="mt-0.5"
                   />
                   <div>

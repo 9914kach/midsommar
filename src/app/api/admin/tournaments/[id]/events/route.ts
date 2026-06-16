@@ -6,11 +6,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const { name, scoring_type } = await request.json();
+  const { name, scoring_type, description } = await request.json();
 
   const { data, error } = await supabase
     .from("tournament_events")
-    .insert({ tournament_id: id, name, scoring_type: scoring_type ?? "points" })
+    .insert({ tournament_id: id, name, scoring_type: scoring_type ?? "points", description: description || null })
     .select()
     .single();
 
