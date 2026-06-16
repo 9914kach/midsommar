@@ -884,11 +884,11 @@ export default function TurneringDetailPage({ params }: { params: Promise<{ id: 
                     <SingleEliminationBracket
                       matches={transformMatchesForBracket(matches, teamMap)}
                       matchComponent={BracketMatchCard}
-                      svgWrapper={({ children, ...props }) => (
+                      svgWrapper={({ children, bracketWidth, bracketHeight }) => (
                         <svg
-                          width={Math.max((props.bracketWidth as number) ?? 400, 320)}
-                          height={Math.max((props.bracketHeight as number) ?? 300, 200)}
-                          viewBox={`0 0 ${Math.max((props.bracketWidth as number) ?? 400, 320)} ${Math.max((props.bracketHeight as number) ?? 300, 200)}`}
+                          width={Math.max((bracketWidth as number) ?? 400, 320)}
+                          height={Math.max((bracketHeight as number) ?? 300, 200)}
+                          viewBox={`0 0 ${Math.max((bracketWidth as number) ?? 400, 320)} ${Math.max((bracketHeight as number) ?? 300, 200)}`}
                           style={{ display: "block" }}
                         >
                           {children}
