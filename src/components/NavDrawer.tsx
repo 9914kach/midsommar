@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   X, Home, Music, Dices, Calendar, Camera,
-  Users, MapPin, ClipboardList, Trophy, Star, ShieldCheck, LogOut, ListChecks, Lock, Coins,
+  Users, MapPin, ClipboardList, Trophy, Star, ShieldCheck, LogOut, ListChecks, Lock, Coins, Medal,
 } from "lucide-react";
 import { useUser } from "@/lib/useUser";
 import { supabase } from "@/lib/supabase";
@@ -16,6 +16,7 @@ const mainNav = [
   { href: "/snapsvisor", label: "Snapsvisor", Icon: Music, locked: false },
   { href: "/dryckerlekar", label: "Dryckerlekar", Icon: Dices, locked: false },
   { href: "/schema", label: "Schema", Icon: Calendar, locked: false },
+  { href: "/femkamp", label: "Femkamp", Icon: Medal, locked: false },
   { href: "/turnering", label: "Turnering", Icon: Trophy, locked: true },
   { href: "/leaderboard", label: "Leaderboard", Icon: Star, locked: true },
   { href: "/bets", label: "Betting", Icon: Coins, locked: true },
