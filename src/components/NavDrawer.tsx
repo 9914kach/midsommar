@@ -71,6 +71,9 @@ export function NavDrawer({ children }: { children: React.ReactNode }) {
     const next = drinks + 1;
     setDrinks(next);
     localStorage.setItem("drink_units", String(next));
+    if (me.id) {
+      supabase.from("app_settings").upsert({ key: `drink_units_${me.id}`, value: String(next) }, { onConflict: "key" });
+    }
     const id = Date.now();
     setPops((p) => [...p, { id }]);
     setTimeout(() => setPops((p) => p.filter((x) => x.id !== id)), 750);
