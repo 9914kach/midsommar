@@ -153,6 +153,12 @@ export type Database = {
         Update: { side?: "for" | "against"; klunkar?: number };
         Relationships: [];
       };
+      custom_snapsvisor: {
+        Row: { id: string; title: string; lyrics: string; melody: string | null; created_by: string | null; creator_name: string | null; created_at: string };
+        Insert: { id?: string; title: string; lyrics: string; melody?: string | null; created_by?: string | null; creator_name?: string | null };
+        Update: { title?: string; lyrics?: string; melody?: string | null };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

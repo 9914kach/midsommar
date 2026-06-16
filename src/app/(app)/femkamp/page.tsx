@@ -1,8 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useUser } from "@/lib/useUser";
+import { DndContext, DragEndEvent, PointerSensor, TouchSensor, useSensor, useSensors } from "@dnd-kit/core";
+import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 type Tournament = { id: string; name: string; status: string };
 type TTeam = { id: string; name: string; color: string | null; official_team_id: string | null };
@@ -59,6 +62,19 @@ function computeEventRanking(teams: TTeam[], evt: TEvent, results: EventResult[]
   })).filter((r) => r.team);
 }
 
+function SortableItem({ id, disabled, children }: {
+  id: string;
+  disabled?: boolean;
+  children: (drag: { listeners: ReturnType<typeof useSortable>["listeners"]; attributes: ReturnType<typeof useSortable>["attributes"] }) => React.ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled });
+  return (
+    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1, zIndex: isDragging ? 10 : undefined, position: "relative" }}>
+      {children({ listeners, attributes })}
+    </div>
+  );
+}
+
 export default function FemkampPage() {
   const me = useUser();
   const isLekledare = me.is("lekledare");
@@ -102,6 +118,12 @@ export default function FemkampPage() {
 
   // Start tournament
   const [starting, setStarting] = useState(false);
+
+  // Edit mode (lekledare only)
+  const [editMode, setEditMode] = useState(false);
+
+  // Reset
+  const [resetting, setResetting] = useState(false);
 
   async function fetchData() {
     const { data: tournaments } = await supabase
@@ -261,25 +283,44 @@ export default function FemkampPage() {
     await fetchData();
   }
 
-  async function reorderEvent(eventId: string, direction: "up" | "down") {
+  async function resetFemkamp() {
     if (!tournament) return;
-    const idx = events.findIndex((e) => e.id === eventId);
-    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= events.length) return;
-    const a = events[idx];
-    const b = events[swapIdx];
-    await Promise.all([
-      fetch(`/api/admin/tournaments/${tournament.id}/events/${a.id}`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sort_order: b.sort_order ?? swapIdx }),
-      }),
-      fetch(`/api/admin/tournaments/${tournament.id}/events/${b.id}`, {
-        method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sort_order: a.sort_order ?? idx }),
-      }),
-    ]);
+    if (!confirm("Nollställ alla resultat i femkampen? Det går inte att ångra.")) return;
+    setResetting(true);
+    await fetch(`/api/admin/tournaments/${tournament.id}/reset`, { method: "POST" });
+    setDraftResults({});
+    setActiveEventId(null);
+    setResetting(false);
     await fetchData();
   }
+
+  async function reorderEvents(orderedIds: string[]) {
+    if (!tournament) return;
+    await Promise.all(
+      orderedIds.map((id, idx) =>
+        fetch(`/api/admin/tournaments/${tournament!.id}/events/${id}`, {
+          method: "PATCH", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sort_order: idx }),
+        })
+      )
+    );
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIdx = events.findIndex((e) => e.id === active.id);
+    const newIdx = events.findIndex((e) => e.id === over.id);
+    if (oldIdx === -1 || newIdx === -1) return;
+    const reordered = arrayMove(events, oldIdx, newIdx);
+    setEvents(reordered);
+    reorderEvents(reordered.map((e) => e.id));
+  }
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 8 } })
+  );
 
   async function setActiveEvent(eventId: string) {
     await fetch("/api/admin/femkamp/active-event", {
@@ -565,8 +606,25 @@ export default function FemkampPage() {
   return (
     <div className="page-bg px-4 pt-6 pb-12 max-w-md mx-auto">
       <div className="pt-4 pb-3">
-        <p className="page-subtitle mb-1">Mångkamp</p>
-        <h1 className="page-title">{tournament?.name ?? "Femkamp"}</h1>
+        <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+          <div>
+            <p className="page-subtitle mb-1">Mångkamp</p>
+            <h1 className="page-title">{tournament?.name ?? "Femkamp"}</h1>
+          </div>
+          {isLekledare && (
+            <button
+              onClick={() => setEditMode((m) => !m)}
+              style={{
+                marginTop: "8px", padding: "6px 14px", borderRadius: "20px", fontSize: "13px", fontWeight: 600,
+                border: editMode ? "1px solid var(--gold)" : "1px solid var(--border)",
+                background: editMode ? "rgba(200,168,75,0.12)" : "transparent",
+                color: editMode ? "var(--gold)" : "var(--text-muted)", cursor: "pointer",
+              }}
+            >
+              {editMode ? "✓ Klar" : "✏️ Redigera"}
+            </button>
+          )}
+        </div>
         <div className="gold-rule" />
       </div>
 
@@ -598,9 +656,12 @@ export default function FemkampPage() {
       {/* ── Active event ── */}
       {activeEvent ? (
         <div className="card p-4 mb-4" style={{ borderLeft: "4px solid var(--gold)" }}>
-          <p style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--gold)", margin: "0 0 6px" }}>
-            Pågående gren
-          </p>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
+            <span style={{ display: "inline-block", width: "8px", height: "8px", borderRadius: "50%", background: "#e53e3e", flexShrink: 0 }} />
+            <p style={{ fontSize: "10px", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--gold)", margin: 0 }}>
+              Pågående gren
+            </p>
+          </div>
           <p style={{ fontWeight: 700, fontSize: "18px", color: "var(--text-dark)", margin: 0 }}>{activeEvent.name}</p>
           {activeEvent.description && (
             <p style={{ fontSize: "13px", color: "var(--text-muted)", margin: "4px 0 0", fontStyle: "italic" }}>{activeEvent.description}</p>
@@ -636,8 +697,8 @@ export default function FemkampPage() {
             </div>
           )}
 
-          {/* Results input for lekledare */}
-          {isLekledare && (
+          {/* Results input for lekledare (edit mode only) */}
+          {isLekledare && editMode && (
             <div style={{ marginTop: "14px", borderTop: "1px solid var(--border)", paddingTop: "12px" }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
                 <p style={{ fontSize: "11px", fontWeight: 600, color: "var(--text-muted)", letterSpacing: "0.08em", textTransform: "uppercase", margin: 0 }}>
@@ -697,130 +758,146 @@ export default function FemkampPage() {
       )}
 
       {/* ── Events list ── */}
-      {isLekledare && (
+      {isLekledare && editMode && (
         <p style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-muted)", margin: "0 0 10px" }}>
-          Grenar
+          Grenar — dra för att ändra ordning
         </p>
       )}
-      <div className="space-y-3">
-        {events.map((evt, evtIdx) => {
-          const isActive = evt.id === activeEventId;
-          const pts = parsePlacementPoints(evt.placement_points);
-          const evtRanking = computeEventRanking(teams, evt, liveResults);
-          const isEditingThis = editingPlacements === evt.id;
+      <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
+        <SortableContext items={events.map((e) => e.id)} strategy={verticalListSortingStrategy}>
+          <div className="space-y-3">
+            {events.map((evt) => {
+              const isActive = evt.id === activeEventId;
+              const pts = parsePlacementPoints(evt.placement_points);
+              const evtRanking = computeEventRanking(teams, evt, liveResults);
+              const isEditingThis = editingPlacements === evt.id;
 
-          return (
-            <div key={evt.id} className="card p-4" style={{ opacity: isActive ? 1 : 0.8 }}>
-              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "6px" }}>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                    {isActive && <span style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "10px", background: "rgba(200,168,75,0.15)", color: "var(--gold)", fontWeight: 700 }}>IGÅNG</span>}
-                    <p style={{ fontWeight: 600, fontSize: "14px", color: "var(--text-dark)", margin: 0 }}>{evt.name}</p>
-                  </div>
-                  {evt.description && (
-                    <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "3px 0 0", fontStyle: "italic" }}>{evt.description}</p>
-                  )}
-                  {pts && (
-                    <div style={{ display: "flex", gap: "5px", flexWrap: "wrap", marginTop: "6px" }}>
-                      {pts.map((p, j) => (
-                        <span key={j} style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "20px", background: "rgba(200,168,75,0.1)", color: "var(--gold)", fontWeight: 600 }}>
-                          {PLACE_MEDALS[j]} {p}p
-                        </span>
-                      ))}
+              return (
+                <SortableItem key={evt.id} id={evt.id} disabled={!isLekledare || !editMode}>
+                  {({ listeners, attributes }) => (
+                    <div className="card p-4" style={{ opacity: isActive ? 1 : 0.8 }}>
+                      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "6px" }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            {isActive && <span style={{ fontSize: "10px", padding: "2px 7px", borderRadius: "10px", background: "rgba(200,168,75,0.15)", color: "var(--gold)", fontWeight: 700 }}>IGÅNG</span>}
+                            <p style={{ fontWeight: 600, fontSize: "14px", color: "var(--text-dark)", margin: 0 }}>{evt.name}</p>
+                          </div>
+                          {evt.description && (
+                            <p style={{ fontSize: "12px", color: "var(--text-muted)", margin: "3px 0 0", fontStyle: "italic" }}>{evt.description}</p>
+                          )}
+                          {pts && (
+                            <div style={{ display: "flex", gap: "5px", flexWrap: "wrap", marginTop: "6px" }}>
+                              {pts.map((p, j) => (
+                                <span key={j} style={{ fontSize: "10px", padding: "2px 6px", borderRadius: "20px", background: "rgba(200,168,75,0.1)", color: "var(--gold)", fontWeight: 600 }}>
+                                  {PLACE_MEDALS[j]} {p}p
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        {isLekledare && editMode && (
+                          <div style={{ display: "flex", gap: "4px", flexShrink: 0, marginLeft: "8px", alignItems: "center" }}>
+                            {/* Drag handle */}
+                            <button
+                              {...listeners} {...attributes}
+                              style={{ cursor: "grab", background: "none", border: "none", padding: "6px 4px", color: "var(--text-muted)", fontSize: "16px", lineHeight: 1, touchAction: "none" }}
+                            >
+                              ⠿
+                            </button>
+                            {!isActive && (
+                              <button onClick={() => setActiveEvent(evt.id)}
+                                style={{ fontSize: "11px", padding: "4px 8px", borderRadius: "8px", border: "1px solid var(--gold)", color: "var(--gold)", background: "none", cursor: "pointer" }}>
+                                Välj
+                              </button>
+                            )}
+                            <button
+                              onClick={() => {
+                                if (isEditingThis) { setEditingPlacements(null); return; }
+                                setDraftPlacements(pts ? pts.map(String) : Array(teams.length).fill(""));
+                                setEditingPlacements(evt.id);
+                              }}
+                              style={{ fontSize: "11px", color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer", padding: "4px" }}
+                            >
+                              {isEditingThis ? "✕" : "✏️"}
+                            </button>
+                            <button onClick={() => deleteEvent(evt.id)}
+                              style={{ fontSize: "11px", color: "var(--lingon)", background: "none", border: "none", cursor: "pointer", padding: "4px" }}>
+                              🗑
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Edit placement points */}
+                      {isLekledare && editMode && isEditingThis && (
+                        <div style={{ background: "rgba(200,168,75,0.06)", borderRadius: "10px", padding: "12px", marginBottom: "10px" }}>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                            {Array.from({ length: teams.length }).map((_, i) => (
+                              <div key={i} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                                <span style={{ fontSize: "14px", width: "28px", flexShrink: 0 }}>{PLACE_MEDALS[i]}</span>
+                                <input
+                                  type="number" min="0" step="0.5" placeholder="0"
+                                  value={draftPlacements[i] ?? ""}
+                                  onChange={(e) => {
+                                    const next = [...draftPlacements];
+                                    next[i] = e.target.value;
+                                    setDraftPlacements(next);
+                                  }}
+                                  style={{ width: "80px", padding: "6px 10px", borderRadius: "8px", border: "1px solid var(--border)", background: "var(--birch)", fontSize: "14px", textAlign: "right", color: "var(--blue-deep)" }}
+                                />
+                                <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>poäng</span>
+                              </div>
+                            ))}
+                          </div>
+                          <button onClick={() => savePlacements(evt.id)}
+                            className="mt-3 w-full py-2 rounded-lg text-sm font-semibold"
+                            style={{ background: "var(--gold)", color: "#1B3F6E" }}>
+                            Spara poängfördelning
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Results summary */}
+                      {evtRanking.length > 0 && (
+                        <div style={{ borderTop: "1px solid var(--border)", paddingTop: "8px" }}>
+                          <div className="space-y-1">
+                            {evtRanking.map(({ team, value, rank }) => (
+                              <div key={team.id} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                <span style={{ fontSize: "13px", width: "20px", flexShrink: 0 }}>{PLACE_MEDALS[rank]}</span>
+                                <div style={{ width: "7px", height: "7px", borderRadius: "50%", background: team.color ?? "#888", flexShrink: 0 }} />
+                                <span style={{ flex: 1, fontSize: "13px", color: "var(--text-dark)" }}>{team.name}</span>
+                                <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                                  {evt.scoring_type === "time" ? `${value}s` : value}
+                                  {pts && <span style={{ marginLeft: "6px", color: "var(--gold)", fontWeight: 600 }}>({pts[rank] ?? 0}p)</span>}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
-                </div>
-                {isLekledare && (
-                  <div style={{ display: "flex", gap: "4px", flexShrink: 0, marginLeft: "8px", alignItems: "center" }}>
-                    <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-                      <button onClick={() => reorderEvent(evt.id, "up")} disabled={evtIdx === 0}
-                        style={{ fontSize: "10px", lineHeight: 1, padding: "3px 5px", borderRadius: "4px", border: "1px solid var(--border)", background: "var(--birch)", cursor: "pointer", color: evtIdx === 0 ? "var(--border)" : "var(--text-muted)" }}>
-                        ▲
-                      </button>
-                      <button onClick={() => reorderEvent(evt.id, "down")} disabled={evtIdx === events.length - 1}
-                        style={{ fontSize: "10px", lineHeight: 1, padding: "3px 5px", borderRadius: "4px", border: "1px solid var(--border)", background: "var(--birch)", cursor: "pointer", color: evtIdx === events.length - 1 ? "var(--border)" : "var(--text-muted)" }}>
-                        ▼
-                      </button>
-                    </div>
-                    {!isActive && (
-                      <button onClick={() => setActiveEvent(evt.id)}
-                        style={{ fontSize: "11px", padding: "4px 8px", borderRadius: "8px", border: "1px solid var(--gold)", color: "var(--gold)", background: "none", cursor: "pointer" }}>
-                        Välj
-                      </button>
-                    )}
-                    <button
-                      onClick={() => {
-                        if (isEditingThis) { setEditingPlacements(null); return; }
-                        setDraftPlacements(pts ? pts.map(String) : Array(teams.length).fill(""));
-                        setEditingPlacements(evt.id);
-                      }}
-                      style={{ fontSize: "11px", color: "var(--text-muted)", background: "none", border: "none", cursor: "pointer", padding: "4px" }}
-                    >
-                      {isEditingThis ? "✕" : "✏️"}
-                    </button>
-                    <button onClick={() => deleteEvent(evt.id)}
-                      style={{ fontSize: "11px", color: "var(--lingon)", background: "none", border: "none", cursor: "pointer", padding: "4px" }}>
-                      🗑
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Edit placement points */}
-              {isEditingThis && (
-                <div style={{ background: "rgba(200,168,75,0.06)", borderRadius: "10px", padding: "12px", marginBottom: "10px" }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-                    {Array.from({ length: teams.length }).map((_, i) => (
-                      <div key={i} style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                        <span style={{ fontSize: "14px", width: "28px", flexShrink: 0 }}>{PLACE_MEDALS[i]}</span>
-                        <input
-                          type="number" min="0" step="0.5" placeholder="0"
-                          value={draftPlacements[i] ?? ""}
-                          onChange={(e) => {
-                            const next = [...draftPlacements];
-                            next[i] = e.target.value;
-                            setDraftPlacements(next);
-                          }}
-                          style={{ width: "80px", padding: "6px 10px", borderRadius: "8px", border: "1px solid var(--border)", background: "var(--birch)", fontSize: "14px", textAlign: "right", color: "var(--blue-deep)" }}
-                        />
-                        <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>poäng</span>
-                      </div>
-                    ))}
-                  </div>
-                  <button onClick={() => savePlacements(evt.id)}
-                    className="mt-3 w-full py-2 rounded-lg text-sm font-semibold"
-                    style={{ background: "var(--gold)", color: "#1B3F6E" }}>
-                    Spara poängfördelning
-                  </button>
-                </div>
-              )}
-
-              {/* Results summary */}
-              {evtRanking.length > 0 && (
-                <div style={{ borderTop: "1px solid var(--border)", paddingTop: "8px" }}>
-                  <div className="space-y-1">
-                    {evtRanking.map(({ team, value, rank }) => (
-                      <div key={team.id} style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                        <span style={{ fontSize: "13px", width: "20px", flexShrink: 0 }}>{PLACE_MEDALS[rank]}</span>
-                        <div style={{ width: "7px", height: "7px", borderRadius: "50%", background: team.color ?? "#888", flexShrink: 0 }} />
-                        <span style={{ flex: 1, fontSize: "13px", color: "var(--text-dark)" }}>{team.name}</span>
-                        <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
-                          {evt.scoring_type === "time" ? `${value}s` : value}
-                          {pts && <span style={{ marginLeft: "6px", color: "var(--gold)", fontWeight: 600 }}>({pts[rank] ?? 0}p)</span>}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
+                </SortableItem>
+              );
+            })}
+          </div>
+        </SortableContext>
+      </DndContext>
 
       {/* ── Lekledare tools ── */}
-      {isLekledare && (
+      {isLekledare && editMode && (
         <div className="mt-5 space-y-3">
+          {/* Sync teams */}
+          {!showAddEvent && !showPenalty && (
+            <button
+              onClick={() => syncOfficialTeams(tournament!.id, teams)}
+              disabled={syncing}
+              className="w-full py-3 rounded-xl text-sm font-semibold"
+              style={{ background: "rgba(27,63,110,0.08)", color: "var(--blue-deep)", border: "1px solid rgba(27,63,110,0.2)" }}
+            >
+              {syncing ? "Synkar..." : "↻ Synka officiella lag"}
+            </button>
+          )}
           {/* Add event */}
           {!showAddEvent && !showPenalty && (
             <div style={{ display: "flex", gap: "8px" }}>
@@ -924,6 +1001,18 @@ export default function FemkampPage() {
                 </button>
               </div>
             </form>
+          )}
+
+          {/* Reset */}
+          {!showAddEvent && !showPenalty && (
+            <button
+              onClick={resetFemkamp}
+              disabled={resetting}
+              className="w-full py-3 rounded-xl text-sm font-semibold"
+              style={{ background: "rgba(139,38,53,0.06)", color: "var(--lingon)", border: "1px solid rgba(139,38,53,0.2)", marginTop: "8px" }}
+            >
+              {resetting ? "Nollställer..." : "⚠ Nollställ alla resultat"}
+            </button>
           )}
         </div>
       )}

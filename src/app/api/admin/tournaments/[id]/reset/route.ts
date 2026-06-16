@@ -17,6 +17,19 @@ export async function POST(
 
   const { id } = await params;
 
+  const { data: tournament } = await supabase.from("tournaments").select("format").eq("id", id).single();
+
+  if (tournament?.format === "multi_event") {
+    const { data: teams } = await supabase.from("tournament_teams").select("id").eq("tournament_id", id);
+    const teamIds = (teams ?? []).map((t) => t.id);
+    if (teamIds.length > 0) {
+      const { error: resultsErr } = await supabase.from("tournament_event_results").delete().in("tournament_team_id", teamIds);
+      if (resultsErr) return NextResponse.json({ error: resultsErr.message }, { status: 500 });
+    }
+    await supabase.from("app_settings").delete().eq("key", "femkamp_active_event");
+    return NextResponse.json({ ok: true });
+  }
+
   const { error: matchErr } = await supabase
     .from("matches")
     .delete()
