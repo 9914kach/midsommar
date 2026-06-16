@@ -7,7 +7,17 @@ export async function PATCH(
 ) {
   const { id } = await params;
   const body = await request.json();
-  const { score_a, score_b, status, winner, reset } = body;
+  const { score_a, score_b, status, winner, reset, set_team_a, set_team_b } = body;
+
+  // ── Directly set team slots (for manual bracket rearrangement) ───────────
+  if (set_team_a !== undefined || set_team_b !== undefined) {
+    const update: { team_a_id?: string | null; team_b_id?: string | null } = {};
+    if (set_team_a !== undefined) update.team_a_id = set_team_a ?? null;
+    if (set_team_b !== undefined) update.team_b_id = set_team_b ?? null;
+    const { error } = await supabase.from("matches").update(update).eq("id", id);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json({ ok: true });
+  }
 
   // ── Reset a completed bracket match ──────────────────────────────────────
   if (reset) {

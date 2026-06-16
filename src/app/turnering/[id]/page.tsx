@@ -32,17 +32,27 @@ const STATUS_LABELS: Record<string, string> = { draft: "Utkast", active: "Pågå
 const STATUS_NEXT: Record<string, string> = { draft: "active", active: "completed" };
 const TEAM_COLORS = ["#e63946", "#f4a261", "#2a9d8f", "#457b9d", "#8b5cf6", "#10b981", "#c77dff", "#6b7280"];
 
-type BracketCtx = { declare: (id: string, side: "a" | "b") => void; isLekledare: boolean };
-const BracketContext = createContext<BracketCtx>({ declare: () => {}, isLekledare: false });
+type SelectedSlot = { matchId: string; side: "a" | "b"; teamId: string };
+type BracketCtx = {
+  declare: (id: string, side: "a" | "b") => void;
+  reset: (id: string) => void;
+  selectedSlot: SelectedSlot | null;
+  onSlotTap: (matchId: string, side: "a" | "b", teamId: string) => void;
+  swapMode: boolean;
+  isLekledare: boolean;
+};
+const BracketContext = createContext<BracketCtx>({
+  declare: () => {}, reset: () => {}, selectedSlot: null, onSlotTap: () => {}, swapMode: false, isLekledare: false,
+});
 
 function BracketMatchCard({ match, topParty, bottomParty, topWon, bottomWon }: {
   match: { id: string; state: string };
-  topParty: { name?: string; resultText?: string | null; isWinner?: boolean };
-  bottomParty: { name?: string; resultText?: string | null; isWinner?: boolean };
+  topParty: { id?: string; name?: string; resultText?: string | null; isWinner?: boolean };
+  bottomParty: { id?: string; name?: string; resultText?: string | null; isWinner?: boolean };
   topWon: boolean; bottomWon: boolean;
   [key: string]: unknown;
 }) {
-  const { declare, isLekledare } = useContext(BracketContext);
+  const { declare, reset, selectedSlot, onSlotTap, swapMode, isLekledare } = useContext(BracketContext);
   const isDone = match.state === "DONE";
 
   return (
@@ -54,29 +64,45 @@ function BracketMatchCard({ match, topParty, bottomParty, topWon, bottomWon }: {
         { party: topParty, won: topWon, side: "a" as const },
         { party: bottomParty, won: bottomWon, side: "b" as const },
       ]).map(({ party, won, side }, i) => {
-        const isTbd = !party.name || party.name === "TBD";
+        const isTbd = !party.name || party.name === "TBD" || (party.id ?? "").startsWith("tbd-");
         const isLoser = isDone && !won;
-        const canClick = !isDone && isLekledare && !isTbd;
+        const teamId = isTbd ? null : (party.id ?? null);
+        const isSelected = !isDone && !!selectedSlot && selectedSlot.matchId === match.id && selectedSlot.side === side;
+        const hasOtherSelected = !isDone && !!selectedSlot && !isSelected;
+
+        const handleClick = () => {
+          if (!isLekledare) return;
+          if (isDone) { if (won) reset(match.id); return; }
+          if (swapMode) {
+            onSlotTap(match.id, side, teamId ?? "");
+          } else if (!isTbd && teamId) {
+            declare(match.id, side);
+          }
+        };
+
         return (
-          <div key={i}
-            onClick={canClick ? () => declare(match.id, side) : undefined}
-            style={{
-              display: "flex", alignItems: "center", justifyContent: "space-between",
-              padding: "8px 10px", gap: "6px",
-              background: won ? "rgba(61,107,58,0.10)" : canClick ? undefined : "transparent",
-              borderTop: i === 1 ? "0.5px solid #e2d9c8" : "none",
-              cursor: canClick ? "pointer" : "default",
-            }}
-          >
+          <div key={i} onClick={handleClick} style={{
+            display: "flex", alignItems: "center", justifyContent: "space-between",
+            padding: "8px 10px", gap: "6px",
+            background: isSelected ? "rgba(27,63,110,0.12)"
+              : won ? "rgba(61,107,58,0.10)"
+              : hasOtherSelected && !isTbd ? "rgba(200,168,75,0.08)"
+              : "transparent",
+            borderTop: i === 1 ? "0.5px solid #e2d9c8" : "none",
+            cursor: isLekledare ? "pointer" : "default",
+            outline: isSelected ? "1.5px solid rgba(27,63,110,0.35)" : "none",
+            outlineOffset: "-1.5px",
+          }}>
             <span style={{
-              fontSize: "12px", fontWeight: won ? 700 : 400, flex: 1,
-              color: won ? "#3D6B3A" : isLoser ? "#bbb" : isTbd ? "#bbb" : "#2D3748",
+              fontSize: "12px", fontWeight: won || isSelected ? 700 : 400, flex: 1,
+              color: won ? "#3D6B3A" : isLoser ? "#bbb" : isTbd ? "#bbb" : isSelected ? "#1B3F6E" : "#2D3748",
               textDecoration: isLoser ? "line-through" : "none",
               overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
             }}>
               {party.name ?? "TBD"}
             </span>
-            {won && <span style={{ fontSize: "11px", color: "#3D6B3A", fontWeight: 700, flexShrink: 0 }}>✓</span>}
+            {won && isLekledare && <span style={{ fontSize: "10px", color: "#3D6B3A", fontWeight: 600, flexShrink: 0 }}>✓ ↩</span>}
+            {won && !isLekledare && <span style={{ fontSize: "11px", color: "#3D6B3A", fontWeight: 700, flexShrink: 0 }}>✓</span>}
           </div>
         );
       })}
@@ -307,6 +333,8 @@ export default function TurneringDetailPage({ params }: { params: Promise<{ id: 
   const [editScores, setEditScores] = useState({ a: 0, b: 0 });
   const [editError, setEditError] = useState<string | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
+  const [selectedSlot, setSelectedSlot] = useState<SelectedSlot | null>(null);
+  const [swapMode, setSwapMode] = useState(false);
   const [showCustomTeam, setShowCustomTeam] = useState(false);
   const [customName, setCustomName] = useState("");
   const [customColor, setCustomColor] = useState(TEAM_COLORS[0]);
@@ -553,6 +581,24 @@ export default function TurneringDetailPage({ params }: { params: Promise<{ id: 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ reset: true }),
     });
+    await fetchData();
+  }
+
+  async function swapTeams(
+    matchA: string, sideA: "a" | "b", teamA: string,
+    matchB: string, sideB: "a" | "b", teamB: string,
+  ) {
+    const key = (side: "a" | "b") => side === "a" ? "set_team_a" : "set_team_b";
+    await Promise.all([
+      fetch(`/api/matches/${matchA}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [key(sideA)]: teamB || null }),
+      }),
+      fetch(`/api/matches/${matchB}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [key(sideB)]: teamA || null }),
+      }),
+    ]);
     await fetchData();
   }
 
@@ -1020,9 +1066,45 @@ export default function TurneringDetailPage({ params }: { params: Promise<{ id: 
             ) : (
               <>
                 {/* Bracket visualisation */}
+                {isLekledare && (
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "8px" }}>
+                    <button
+                      onClick={() => { setSwapMode((m) => !m); setSelectedSlot(null); }}
+                      style={{
+                        fontSize: "12px", fontWeight: 600, padding: "5px 12px", borderRadius: "20px", border: "none", cursor: "pointer",
+                        background: swapMode ? "rgba(27,63,110,0.15)" : "rgba(27,63,110,0.07)",
+                        color: swapMode ? "var(--blue-deep)" : "var(--text-muted)",
+                        outline: swapMode ? "1.5px solid rgba(27,63,110,0.3)" : "none",
+                      }}
+                    >
+                      {swapMode ? "✓ Klart" : "↔ Flytta lag"}
+                    </button>
+                  </div>
+                )}
+                {swapMode && isLekledare && (
+                  <p style={{ fontSize: "11px", color: "var(--text-muted)", textAlign: "center", marginBottom: "8px" }}>
+                    {selectedSlot ? "Tryck på ett annat lag för att byta plats" : "Tryck på ett lag för att välja det"}
+                  </p>
+                )}
                 <div className="mb-5 -mx-4 overflow-x-auto">
                   <div style={{ display: "inline-block", minWidth: "100%", paddingBottom: "8px" }}>
-                    <BracketContext.Provider value={{ declare: declareWinner, isLekledare }}>
+                    <BracketContext.Provider value={{
+                      declare: (matchId, side) => { setSelectedSlot(null); declareWinner(matchId, side); },
+                      reset: (matchId) => { setSelectedSlot(null); resetMatch(matchId); },
+                      selectedSlot,
+                      onSlotTap: (matchId, side, teamId) => {
+                        if (!selectedSlot) {
+                          setSelectedSlot({ matchId, side, teamId });
+                        } else if (selectedSlot.matchId === matchId && selectedSlot.side === side) {
+                          setSelectedSlot(null);
+                        } else {
+                          swapTeams(selectedSlot.matchId, selectedSlot.side, selectedSlot.teamId, matchId, side, teamId);
+                          setSelectedSlot(null);
+                        }
+                      },
+                      swapMode,
+                      isLekledare,
+                    }}>
                       <SingleEliminationBracket
                         matches={transformMatchesForBracket(matches, teamMap)}
                         matchComponent={BracketMatchCard}
