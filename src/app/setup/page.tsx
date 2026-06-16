@@ -1,13 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 
 export default function SetupPage() {
   const [username, setUsername] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
 
   const preview = username.trim().toLowerCase().replace(/[^a-z0-9_\-åäö]/gi, "");
 
@@ -24,8 +22,7 @@ export default function SetupPage() {
 
     const data = await res.json();
     if (res.ok) {
-      router.push("/");
-      router.refresh();
+      window.location.replace("/");
     } else {
       setError(data.error ?? "Något gick fel");
       setLoading(false);

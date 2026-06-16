@@ -12,14 +12,6 @@ const SingleEliminationBracket = dynamic(
   () => import("@g-loot/react-tournament-brackets").then((m) => m.SingleEliminationBracket),
   { ssr: false }
 );
-const SVGViewer = dynamic(
-  () => import("@g-loot/react-tournament-brackets").then((m) => m.SVGViewer),
-  { ssr: false }
-);
-const BracketMatch = dynamic(
-  () => import("@g-loot/react-tournament-brackets").then((m) => m.Match),
-  { ssr: false }
-);
 
 type Tournament = { id: string; name: string; game: string; format: string; status: string };
 type TTeam = { id: string; name: string; color: string | null; points: number };
@@ -38,6 +30,47 @@ const statusBg: Record<string, string> = {
 const STATUS_LABELS: Record<string, string> = { draft: "Utkast", active: "Pågår", completed: "Avslutad" };
 const STATUS_NEXT: Record<string, string> = { draft: "active", active: "completed" };
 const TEAM_COLORS = ["#e63946", "#f4a261", "#2a9d8f", "#457b9d", "#8b5cf6", "#10b981", "#c77dff", "#6b7280"];
+
+function BracketMatchCard({ match, topParty, bottomParty, topWon, bottomWon }: {
+  match: { state: string };
+  topParty: { name?: string; resultText?: string | null; isWinner?: boolean };
+  bottomParty: { name?: string; resultText?: string | null; isWinner?: boolean };
+  topWon: boolean; bottomWon: boolean;
+  [key: string]: unknown;
+}) {
+  const isDone = match.state === "DONE";
+  return (
+    <div style={{
+      background: "#FAFAF7", border: "0.5px solid #e2d9c8", borderRadius: "8px",
+      width: "160px", fontFamily: "var(--font-inter, system-ui, sans-serif)", overflow: "hidden",
+    }}>
+      {[{ party: topParty, won: topWon }, { party: bottomParty, won: bottomWon }].map(({ party, won }, i) => (
+        <div key={i} style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "6px 8px", gap: "6px",
+          background: won ? "rgba(61,107,58,0.08)" : "transparent",
+          borderTop: i === 1 ? "0.5px solid #e2d9c8" : "none",
+        }}>
+          <span style={{
+            fontSize: "12px", fontWeight: won ? 600 : 400, flex: 1,
+            color: won ? "#3D6B3A" : party.name === "TBD" ? "#aaa" : "#2D3748",
+            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
+          }}>
+            {party.name ?? "TBD"}
+          </span>
+          {isDone && party.resultText != null && (
+            <span style={{
+              fontSize: "12px", fontWeight: 700, minWidth: "20px", textAlign: "right",
+              color: won ? "#3D6B3A" : "#999",
+            }}>
+              {party.resultText}
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 type MatchCardProps = {
   match: Match; teamMap: Map<string, TTeam>; isLekledare: boolean;
@@ -72,51 +105,98 @@ function MatchCard({ match, teamMap, isLekledare, editingMatchId, editScores, ed
 
   return (
     <div className="card p-4" style={{ background: statusBg[match.status] ?? "var(--birch)" }}>
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          {tA?.color && <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: tA.color }} />}
-          <span className="font-semibold text-sm truncate" style={{ color: "var(--text-dark)" }}>{tA?.name ?? "TBD"}</span>
-        </div>
-        <div className="flex items-center gap-2 px-3 shrink-0">
-          <span className="text-xl font-bold tabular-nums" style={{ color: "var(--blue-deep)" }}>{match.score_a}</span>
-          <span style={{ color: "var(--border)" }}>–</span>
-          <span className="text-xl font-bold tabular-nums" style={{ color: "var(--blue-deep)" }}>{match.score_b}</span>
-        </div>
-        <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
-          <span className="font-semibold text-sm truncate" style={{ color: "var(--text-dark)" }}>{tB?.name ?? "TBD"}</span>
-          {tB?.color && <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: tB.color }} />}
-        </div>
-      </div>
-
-      {isActive && (
-        <div className="flex gap-2 mt-3">
-          <div className="flex gap-1 flex-1">
-            <button onClick={() => updateScore(match.id, "score_a", -1)}
-              className="w-9 h-9 rounded-lg font-bold text-lg flex items-center justify-center"
-              style={{ background: "var(--border)", color: "var(--text-dark)" }}>–</button>
-            <button onClick={() => updateScore(match.id, "score_a", 1)}
-              className="w-9 h-9 rounded-lg font-bold text-lg flex items-center justify-center"
-              style={{ background: "var(--blue-deep)", color: "white" }}>+</button>
+      {/* Score display (always visible) */}
+      {!isActive && !isEditing && (
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            {tA?.color && <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: tA.color }} />}
+            <span className="font-semibold text-sm truncate" style={{ color: "var(--text-dark)" }}>{tA?.name ?? "TBD"}</span>
           </div>
+          <div className="flex items-center gap-2 px-3 shrink-0">
+            <span className="text-xl font-bold tabular-nums" style={{ color: "var(--blue-deep)" }}>{match.score_a}</span>
+            <span style={{ color: "var(--border)" }}>–</span>
+            <span className="text-xl font-bold tabular-nums" style={{ color: "var(--blue-deep)" }}>{match.score_b}</span>
+          </div>
+          <div className="flex items-center gap-2 flex-1 min-w-0 justify-end">
+            <span className="font-semibold text-sm truncate" style={{ color: "var(--text-dark)" }}>{tB?.name ?? "TBD"}</span>
+            {tB?.color && <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: tB.color }} />}
+          </div>
+        </div>
+      )}
+
+      {/* Active scoring: two rows, one per team */}
+      {isActive && (
+        <div className="space-y-1.5">
+          {[
+            { team: tA, score: match.score_a, field: "score_a" as const },
+            { team: tB, score: match.score_b, field: "score_b" as const },
+          ].map(({ team, score, field }) => (
+            <div key={field} className="flex items-center gap-3">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                {team?.color && <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: team.color }} />}
+                <span className="font-semibold text-sm truncate" style={{ color: "var(--text-dark)" }}>{team?.name ?? "TBD"}</span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button onClick={() => updateScore(match.id, field, -1)}
+                  className="w-11 h-11 rounded-xl font-bold text-xl flex items-center justify-center"
+                  style={{ background: "var(--border)", color: "var(--text-dark)" }}>−</button>
+                <span className="text-2xl font-bold w-9 text-center tabular-nums" style={{ color: "var(--blue-deep)" }}>{score}</span>
+                <button onClick={() => updateScore(match.id, field, 1)}
+                  className="w-11 h-11 rounded-xl font-bold text-xl flex items-center justify-center"
+                  style={{ background: "var(--blue-deep)", color: "white" }}>+</button>
+              </div>
+            </div>
+          ))}
           {isLekledare && (
             <button onClick={() => setMatchStatus(match.id, "completed")}
-              className="px-3 py-1 rounded-lg text-xs font-semibold"
-              style={{ background: "var(--leaf)", color: "white" }}>Avsluta</button>
+              className="w-full mt-2 py-3 rounded-xl text-sm font-semibold"
+              style={{ background: "var(--leaf)", color: "white" }}>
+              ✓ Avsluta match
+            </button>
           )}
-          <div className="flex gap-1 flex-1 justify-end">
-            <button onClick={() => updateScore(match.id, "score_b", 1)}
-              className="w-9 h-9 rounded-lg font-bold text-lg flex items-center justify-center"
-              style={{ background: "var(--blue-deep)", color: "white" }}>+</button>
-            <button onClick={() => updateScore(match.id, "score_b", -1)}
-              className="w-9 h-9 rounded-lg font-bold text-lg flex items-center justify-center"
-              style={{ background: "var(--border)", color: "var(--text-dark)" }}>–</button>
-          </div>
+        </div>
+      )}
+
+      {/* Correction editing: same two-row layout */}
+      {isEditing && (
+        <div className="space-y-1.5">
+          {[
+            { team: tA, score: editScores.a, onChange: (v: number) => setEditScores({ a: v, b: editScores.b }) },
+            { team: tB, score: editScores.b, onChange: (v: number) => setEditScores({ a: editScores.a, b: v }) },
+          ].map(({ team, score, onChange }, i) => (
+            <div key={i} className="flex items-center gap-3">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                {team?.color && <div className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: team.color }} />}
+                <span className="font-semibold text-sm truncate" style={{ color: "var(--text-dark)" }}>{team?.name ?? "TBD"}</span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button onClick={() => onChange(Math.max(0, score - 1))}
+                  className="w-11 h-11 rounded-xl font-bold text-xl flex items-center justify-center"
+                  style={{ background: "var(--border)", color: "var(--text-dark)" }}>−</button>
+                <span className="text-2xl font-bold w-9 text-center tabular-nums" style={{ color: "var(--blue-deep)" }}>{score}</span>
+                <button onClick={() => onChange(score + 1)}
+                  className="w-11 h-11 rounded-xl font-bold text-xl flex items-center justify-center"
+                  style={{ background: "var(--blue-deep)", color: "white" }}>+</button>
+              </div>
+            </div>
+          ))}
+          {editError && <p className="text-xs text-center pt-1" style={{ color: "var(--lingon)" }}>{editError}</p>}
+          <button onClick={saveEditedScore} disabled={savingEdit}
+            className="w-full mt-2 py-3 rounded-xl text-sm font-semibold"
+            style={{ background: "var(--leaf)", color: "white" }}>
+            {savingEdit ? "Sparar..." : "Spara korrigering"}
+          </button>
+          <button onClick={() => { setEditingMatchId(null); setEditError(null); }}
+            className="w-full py-2.5 rounded-xl text-sm font-semibold"
+            style={{ background: "var(--border)", color: "var(--text-dark)" }}>
+            Avbryt
+          </button>
         </div>
       )}
 
       {match.status === "pending" && isLekledare && (
         <button onClick={() => setMatchStatus(match.id, "active")}
-          className="w-full mt-3 py-1.5 rounded-lg text-xs font-semibold"
+          className="w-full mt-3 py-3 rounded-xl text-sm font-semibold"
           style={{ background: "rgba(200,168,75,0.2)", color: "#7a6010" }}>
           ▶ Starta match
         </button>
@@ -127,45 +207,11 @@ function MatchCard({ match, teamMap, isLekledare, editingMatchId, editScores, ed
           <p className="text-xs" style={{ color: "var(--text-muted)" }}>✓ Avslutad</p>
           {isLekledare && (
             <button onClick={() => { setEditingMatchId(match.id); setEditScores({ a: match.score_a, b: match.score_b }); setEditError(null); }}
-              className="text-xs underline" style={{ color: "var(--blue-mid)" }}>Rätta</button>
-          )}
-        </div>
-      )}
-
-      {isDone && isEditing && (
-        <div className="mt-3 space-y-2">
-          <div className="flex items-center gap-3 justify-center">
-            <div className="flex items-center gap-1">
-              <button onClick={() => setEditScores({ a: Math.max(0, editScores.a - 1), b: editScores.b })}
-                className="w-8 h-8 rounded-lg font-bold flex items-center justify-center"
-                style={{ background: "var(--border)", color: "var(--text-dark)" }}>–</button>
-              <span className="text-xl font-bold w-8 text-center tabular-nums" style={{ color: "var(--blue-deep)" }}>{editScores.a}</span>
-              <button onClick={() => setEditScores({ a: editScores.a + 1, b: editScores.b })}
-                className="w-8 h-8 rounded-lg font-bold flex items-center justify-center"
-                style={{ background: "var(--blue-deep)", color: "white" }}>+</button>
-            </div>
-            <span style={{ color: "var(--border)" }}>–</span>
-            <div className="flex items-center gap-1">
-              <button onClick={() => setEditScores({ a: editScores.a, b: Math.max(0, editScores.b - 1) })}
-                className="w-8 h-8 rounded-lg font-bold flex items-center justify-center"
-                style={{ background: "var(--border)", color: "var(--text-dark)" }}>–</button>
-              <span className="text-xl font-bold w-8 text-center tabular-nums" style={{ color: "var(--blue-deep)" }}>{editScores.b}</span>
-              <button onClick={() => setEditScores({ a: editScores.a, b: editScores.b + 1 })}
-                className="w-8 h-8 rounded-lg font-bold flex items-center justify-center"
-                style={{ background: "var(--blue-deep)", color: "white" }}>+</button>
-            </div>
-          </div>
-          {editError && <p className="text-xs text-center" style={{ color: "var(--lingon)" }}>{editError}</p>}
-          <div className="flex gap-2">
-            <button onClick={saveEditedScore} disabled={savingEdit}
-              className="flex-1 py-1.5 rounded-lg text-xs font-semibold"
-              style={{ background: "var(--leaf)", color: "white" }}>
-              {savingEdit ? "..." : "Spara korrigering"}
+              className="text-xs px-3 py-1.5 rounded-lg font-medium"
+              style={{ background: "rgba(27,63,110,0.08)", color: "var(--blue-deep)", border: "1px solid rgba(27,63,110,0.15)" }}>
+              Rätta
             </button>
-            <button onClick={() => { setEditingMatchId(null); setEditError(null); }}
-              className="flex-1 py-1.5 rounded-lg text-xs font-semibold"
-              style={{ background: "var(--border)", color: "var(--text-dark)" }}>Avbryt</button>
-          </div>
+          )}
         </div>
       )}
     </div>
@@ -458,7 +504,6 @@ export default function TurneringDetailPage({ params }: { params: Promise<{ id: 
   const noMatches = matches.length === 0;
   const hasTeams = teams.length >= 2;
   const currentStatus = tournament?.status ?? "draft";
-  const nextStatus = STATUS_NEXT[currentStatus];
   const allOfficialAdded = officialTeams.length > 0 && officialTeams.every((ot) => teams.some((t) => t.name === ot.name));
   const format = (tournament?.format ?? "bracket") as "bracket" | "round_robin" | "multi_event";
   const matchPreview = teams.length >= 2 && format !== "multi_event" ? previewFormat(teams.length, format) : null;
@@ -565,11 +610,11 @@ export default function TurneringDetailPage({ params }: { params: Promise<{ id: 
                       style={{ borderColor: "var(--border)", background: "var(--birch)" }} />
                     <div>
                       <p className="text-xs mb-2" style={{ color: "var(--text-muted)" }}>Färg</p>
-                      <div className="flex gap-2 flex-wrap">
+                      <div className="grid grid-cols-4 gap-3">
                         {TEAM_COLORS.map((c) => (
                           <button key={c} type="button" onClick={() => setCustomColor(c)}
-                            className="w-7 h-7 rounded-full transition-all"
-                            style={{ background: c, outline: customColor === c ? `2px solid ${c}` : "none", outlineOffset: "2px" }} />
+                            className="w-10 h-10 rounded-full transition-all"
+                            style={{ background: c, outline: customColor === c ? `2px solid ${c}` : "none", outlineOffset: "3px" }} />
                         ))}
                       </div>
                     </div>
@@ -581,16 +626,16 @@ export default function TurneringDetailPage({ params }: { params: Promise<{ id: 
                         {availableUsers.length === 0 ? (
                           <p className="text-xs" style={{ color: "var(--text-muted)" }}>Alla gäster är redan i ett lag</p>
                         ) : (
-                          <div className="space-y-1 max-h-48 overflow-y-auto">
+                          <div className="space-y-1">
                             {availableUsers.map((u) => (
                               <button key={u.id} type="button" onClick={() => toggleUser(u.id)}
-                                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm text-left transition-all"
+                                className="w-full flex items-center gap-2 px-3 py-3 rounded-lg text-sm text-left transition-all"
                                 style={{
                                   background: selectedUserIds.has(u.id) ? customColor + "22" : "transparent",
                                   color: selectedUserIds.has(u.id) ? customColor : "var(--text-dark)",
                                   border: `1px solid ${selectedUserIds.has(u.id) ? customColor + "55" : "transparent"}`,
                                 }}>
-                                <span className="w-4 h-4 rounded flex items-center justify-center text-xs shrink-0"
+                                <span className="w-5 h-5 rounded flex items-center justify-center text-xs shrink-0"
                                   style={{ background: selectedUserIds.has(u.id) ? customColor : "var(--border)", color: "white" }}>
                                   {selectedUserIds.has(u.id) ? "✓" : ""}
                                 </span>
@@ -679,28 +724,48 @@ export default function TurneringDetailPage({ params }: { params: Promise<{ id: 
 
             {/* Reset (bracket/round_robin only) */}
             {!noMatches && format !== "multi_event" && (
-              <button onClick={resetMatches} disabled={resetting} className="text-xs underline" style={{ color: "var(--lingon)" }}>
+              <button onClick={resetMatches} disabled={resetting}
+                className="w-full py-3 rounded-xl text-sm font-semibold border"
+                style={{ borderColor: "var(--lingon)", color: "var(--lingon)", background: "transparent" }}>
                 {resetting ? "Återställer..." : "↺ Återställ alla matcher"}
               </button>
             )}
 
-            {/* Status control */}
-            {nextStatus && (
-              <div className="flex items-center gap-2 pt-1 border-t" style={{ borderColor: "rgba(168,197,218,0.15)" }}>
-                <span className="text-xs" style={{ color: "var(--text-muted)" }}>Status:</span>
-                <button onClick={() => setTournamentStatus(nextStatus)}
-                  className="text-xs px-3 py-1 rounded-lg font-semibold"
-                  style={{
-                    background: nextStatus === "active" ? "rgba(200,168,75,0.2)" : "rgba(61,107,58,0.15)",
-                    color: nextStatus === "active" ? "#7a6010" : "var(--leaf)",
-                  }}>
-                  → {STATUS_LABELS[nextStatus]}
-                </button>
-                <button onClick={deleteTournament} className="text-xs ml-auto" style={{ color: "var(--lingon)" }}>
-                  🗑 Radera
-                </button>
+            {/* Status control — 3-state segmented */}
+            {tournament && (
+              <div className="space-y-1.5 pt-1 border-t" style={{ borderColor: "rgba(168,197,218,0.15)" }}>
+                <p className="text-xs" style={{ color: "var(--text-muted)" }}>Turneringsstatus</p>
+                <div className="flex gap-1.5">
+                  {(["draft", "active", "completed"] as const).map((s) => {
+                    const isCurrent = tournament.status === s;
+                    const isPast = (s === "draft" && (tournament.status === "active" || tournament.status === "completed"))
+                      || (s === "active" && tournament.status === "completed");
+                    const isNext = STATUS_NEXT[tournament.status] === s;
+                    return (
+                      <button key={s}
+                        disabled={!isNext}
+                        onClick={() => isNext && setTournamentStatus(s)}
+                        className="flex-1 py-2 rounded-lg text-xs font-semibold transition-all"
+                        style={{
+                          background: isCurrent ? "var(--blue-deep)" : isPast ? "rgba(27,63,110,0.1)" : "var(--birch)",
+                          color: isCurrent ? "white" : isPast ? "var(--text-muted)" : isNext ? "var(--blue-deep)" : "var(--text-muted)",
+                          border: isNext ? "1.5px solid var(--blue-deep)" : "1px solid var(--border)",
+                          opacity: (!isCurrent && !isNext && !isPast) ? 0.5 : 1,
+                        }}>
+                        {STATUS_LABELS[s]}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             )}
+
+            {/* Delete tournament */}
+            <button onClick={deleteTournament}
+              className="w-full py-2.5 rounded-xl text-sm font-semibold"
+              style={{ background: "rgba(139,38,53,0.1)", color: "var(--lingon)", border: "1px solid rgba(139,38,53,0.2)" }}>
+              Radera turnering
+            </button>
           </div>
         )}
 
@@ -815,38 +880,19 @@ export default function TurneringDetailPage({ params }: { params: Promise<{ id: 
               <>
                 {/* Bracket visualisation */}
                 <div className="mb-5 -mx-4 overflow-x-auto">
-                  <div style={{ minWidth: "320px" }}>
+                  <div style={{ display: "inline-block", minWidth: "100%", paddingBottom: "8px" }}>
                     <SingleEliminationBracket
                       matches={transformMatchesForBracket(matches, teamMap)}
-                      matchComponent={BracketMatch}
-                      options={{
-                        style: {
-                          roundHeader: { backgroundColor: "#1B3F6E", fontColor: "#FAFAF7" },
-                          connectorColor: "#d4c5a9",
-                          connectorColorHighlight: "#C8A84B",
-                        },
-                      }}
-                      theme={{
-                        textColor: { main: "#2D3748", highlighted: "#1B3F6E", dark: "#1B3F6E" },
-                        matchBackground: { wonColor: "#eef7ee", lostColor: "#F5F0E8" },
-                        score: {
-                          background: { wonColor: "#3D6B3A", lostColor: "#e2d9c8" },
-                          text: { highlightedWonColor: "#fff", highlightedLostColor: "#4a5568" },
-                        },
-                        border: { color: "#e2d9c8", highlightedColor: "#C8A84B" },
-                        roundHeader: { backgroundColor: "#1B3F6E", fontColor: "#FAFAF7" },
-                        connectorColor: "#d4c5a9",
-                        connectorColorHighlight: "#C8A84B",
-                        svgBackground: "#F5F0E8",
-                      }}
+                      matchComponent={BracketMatchCard}
                       svgWrapper={({ children, ...props }) => (
-                        <SVGViewer
-                          width={Math.max(props.bracketWidth ?? 400, 320)}
-                          height={Math.max(props.bracketHeight ?? 300, 200)}
-                          {...props}
+                        <svg
+                          width={Math.max((props.bracketWidth as number) ?? 400, 320)}
+                          height={Math.max((props.bracketHeight as number) ?? 300, 200)}
+                          viewBox={`0 0 ${Math.max((props.bracketWidth as number) ?? 400, 320)} ${Math.max((props.bracketHeight as number) ?? 300, 200)}`}
+                          style={{ display: "block" }}
                         >
                           {children}
-                        </SVGViewer>
+                        </svg>
                       )}
                     />
                   </div>

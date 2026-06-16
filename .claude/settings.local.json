@@ -22,7 +22,20 @@
       "Bash(mkdir -p \"C:/Users/9914k/dev/midsommar/src/app/admin/turnering/[id]\")",
       "Bash(mkdir -p \"C:/Users/9914k/dev/midsommar/src/app/turnering/[id]\")",
       "Bash(npx tsc *)",
-      "Bash(pkill -f \"next dev\")"
+      "Bash(pkill -f \"next dev\")",
+      "Bash(taskkill /PID 35988 /F)",
+      "Bash(cmd *)",
+      "PowerShell(Stop-Process *)",
+      "Bash(pkill -f \"node.*next\")",
+      "Bash(taskkill /PID 28524 /F)",
+      "Bash(taskkill /PID 29236 /F)",
+      "Bash(git diff *)",
+      "Bash(git checkout *)",
+      "Bash(npm install *)",
+      "Bash(npm list *)",
+      "Bash(xargs grep *)",
+      "Bash(xargs cat *)",
+      "Bash(grep -E \"\\\\.tsx$\")"
     ]
   }
 }

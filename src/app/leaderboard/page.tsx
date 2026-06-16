@@ -253,19 +253,19 @@ export default function LeaderboardPage() {
                         style={{ borderColor: "var(--border)", background: "var(--birch)" }}
                         placeholder="Lagnamn"
                       />
-                      <div className="flex gap-2 flex-wrap">
+                      <div className="grid grid-cols-4 gap-3">
                         {TEAM_COLORS.map((c) => (
                           <button key={c} onClick={() => setEditDraft((d) => d ? { ...d, color: c } : d)}
-                            className="w-7 h-7 rounded-full"
-                            style={{ background: c, outline: editDraft.color === c ? "2px solid white" : "none", outlineOffset: "2px", boxShadow: editDraft.color === c ? `0 0 0 3px ${c}` : "none" }}
+                            className="w-10 h-10 rounded-full"
+                            style={{ background: c, outline: editDraft.color === c ? "2px solid white" : "none", outlineOffset: "3px", boxShadow: editDraft.color === c ? `0 0 0 4px ${c}` : "none" }}
                           />
                         ))}
                       </div>
-                      <div className="flex gap-2 flex-wrap">
+                      <div className="grid grid-cols-4 gap-2">
                         {TEAM_EMOJIS.map((e) => (
                           <button key={e} onClick={() => setEditDraft((d) => d ? { ...d, emoji: e } : d)}
-                            className="w-8 h-8 rounded-lg text-lg flex items-center justify-center"
-                            style={{ background: editDraft.emoji === e ? "var(--blue-deep)" : "var(--birch)", border: "1px solid var(--border)" }}
+                            className="w-10 h-10 rounded-xl text-xl flex items-center justify-center"
+                            style={{ background: editDraft.emoji === e ? "var(--blue-deep)" : "var(--birch)", border: `1px solid ${editDraft.emoji === e ? "var(--blue-deep)" : "var(--border)"}` }}
                           >
                             {e}
                           </button>
@@ -274,16 +274,16 @@ export default function LeaderboardPage() {
 
                       <div>
                         <p className="text-xs font-semibold mb-1" style={{ color: "var(--text-muted)" }}>Medlemmar</p>
-                        <div className="space-y-1">
+                        <div className="space-y-0.5">
                           {s.members.map((name) => {
                             const u = allUsers.find((u) => u.username === name);
                             return (
-                              <div key={name} className="flex items-center justify-between text-sm">
-                                <span>{name}</span>
+                              <div key={name} className="flex items-center justify-between py-2 text-sm">
+                                <span style={{ color: "var(--text-dark)" }}>{name}</span>
                                 {u && (
                                   <button onClick={() => removeMember(s.team.id, u.id)}
-                                    className="text-xs px-2 py-0.5 rounded"
-                                    style={{ color: "var(--lingon)" }}>
+                                    className="text-xs px-3 py-1.5 rounded-lg font-medium"
+                                    style={{ color: "var(--lingon)", background: "rgba(139,38,53,0.08)" }}>
                                     Ta bort
                                   </button>
                                 )}
@@ -296,12 +296,12 @@ export default function LeaderboardPage() {
                       {unassigned.length > 0 && (
                         <div>
                           <p className="text-xs font-semibold mb-1" style={{ color: "var(--text-muted)" }}>Lägg till</p>
-                          <div className="flex flex-wrap gap-1">
+                          <div className="space-y-0.5">
                             {unassigned.map((u) => (
                               <button key={u.id} onClick={() => addMember(s.team.id, u.id)}
-                                className="text-xs px-2 py-0.5 rounded-full"
-                                style={{ background: "rgba(27,63,110,0.08)", color: "var(--blue-deep)", border: "1px solid var(--border)" }}>
-                                + {u.username}
+                                className="w-full flex items-center gap-2 py-2 px-3 rounded-lg text-sm text-left"
+                                style={{ background: "rgba(27,63,110,0.05)", color: "var(--blue-deep)", border: "1px solid var(--border)" }}>
+                                <span className="font-bold">+</span> {u.username}
                               </button>
                             ))}
                           </div>
