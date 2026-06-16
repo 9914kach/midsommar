@@ -49,18 +49,32 @@ function getCookie(name: string): string {
 
 const ROLES = ["gäst", "värd", "lekledare", "admin"] as const;
 
+type DrinkPop = { id: number };
+
 export function NavDrawer({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   const [partyUnlocked, setPartyUnlocked] = useState(false);
   const [simRole, setSimRole] = useState<string>("");
   const [mounted, setMounted] = useState(false);
+  const [drinks, setDrinks] = useState(0);
+  const [pops, setPops] = useState<DrinkPop[]>([]);
   const pathname = usePathname();
   const me = useUser();
 
   useEffect(() => {
     setSimRole(sessionStorage.getItem("simulate_role") ?? "");
+    setDrinks(Number(localStorage.getItem("drink_units") ?? "0"));
     setMounted(true);
   }, []);
+
+  function addDrink() {
+    const next = drinks + 1;
+    setDrinks(next);
+    localStorage.setItem("drink_units", String(next));
+    const id = Date.now();
+    setPops((p) => [...p, { id }]);
+    setTimeout(() => setPops((p) => p.filter((x) => x.id !== id)), 750);
+  }
 
   const realRole = mounted ? getCookie("midsommar_role") : "";
   const isRealAdmin = realRole === "admin";
@@ -109,12 +123,32 @@ export function NavDrawer({ children }: { children: React.ReactNode }) {
         }}>
           Midsommar
         </span>
-        <div style={{ width: "36px", display: "flex", justifyContent: "flex-end" }}>
-          {me.username && (
-            <span style={{ fontSize: "11px", color: "#A8C5DA", fontFamily: "var(--font-inter)" }}>
-              {me.username}
+        <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+          {pops.map((p) => (
+            <span key={p.id} className="drink-pop" style={{ bottom: "100%", right: "50%", transform: "translateX(50%)" }}>
+              +1
             </span>
-          )}
+          ))}
+          <button
+            onClick={addDrink}
+            aria-label="Lägg till en enhet"
+            style={{
+              background: "none", border: "none", cursor: "pointer",
+              display: "flex", flexDirection: "column", alignItems: "center",
+              padding: "4px 6px", gap: "1px",
+            }}
+          >
+            <span style={{ fontSize: "18px", lineHeight: 1 }}>🍺</span>
+            {mounted && (
+              <span style={{
+                fontSize: "10px", fontWeight: 700, lineHeight: 1,
+                fontFamily: "var(--font-inter), Inter, system-ui, sans-serif",
+                color: drinks > 0 ? "#C8A84B" : "rgba(168,197,218,0.5)",
+              }}>
+                {drinks}
+              </span>
+            )}
+          </button>
         </div>
       </header>
 

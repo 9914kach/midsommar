@@ -144,3 +144,20 @@ body {
   background: var(--gold);
   margin: 14px 0;
 }
+
+
+@keyframes drink-pop {
+  0%   { opacity: 1; transform: translateY(0) scale(1); }
+  60%  { opacity: 1; transform: translateY(-28px) scale(1.15); }
+  100% { opacity: 0; transform: translateY(-48px) scale(0.9); }
+}
+.drink-pop {
+  position: absolute;
+  pointer-events: none;
+  font-family: var(--font-inter), Inter, system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: #C8A84B;
+  white-space: nowrap;
+  animation: drink-pop 0.7s ease-out forwards;
+}
