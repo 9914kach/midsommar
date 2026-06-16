@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, use } from "react";
+import { useEffect, useState, use, useContext, createContext } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { supabase } from "@/lib/supabase";
@@ -32,43 +32,54 @@ const STATUS_LABELS: Record<string, string> = { draft: "Utkast", active: "Pågå
 const STATUS_NEXT: Record<string, string> = { draft: "active", active: "completed" };
 const TEAM_COLORS = ["#e63946", "#f4a261", "#2a9d8f", "#457b9d", "#8b5cf6", "#10b981", "#c77dff", "#6b7280"];
 
+type BracketCtx = { declare: (id: string, side: "a" | "b") => void; isLekledare: boolean };
+const BracketContext = createContext<BracketCtx>({ declare: () => {}, isLekledare: false });
+
 function BracketMatchCard({ match, topParty, bottomParty, topWon, bottomWon }: {
-  match: { state: string };
+  match: { id: string; state: string };
   topParty: { name?: string; resultText?: string | null; isWinner?: boolean };
   bottomParty: { name?: string; resultText?: string | null; isWinner?: boolean };
   topWon: boolean; bottomWon: boolean;
   [key: string]: unknown;
 }) {
+  const { declare, isLekledare } = useContext(BracketContext);
   const isDone = match.state === "DONE";
+
   return (
     <div style={{
       background: "#FAFAF7", border: "0.5px solid #e2d9c8", borderRadius: "8px",
       width: "160px", fontFamily: "var(--font-inter, system-ui, sans-serif)", overflow: "hidden",
     }}>
-      {[{ party: topParty, won: topWon }, { party: bottomParty, won: bottomWon }].map(({ party, won }, i) => (
-        <div key={i} style={{
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "6px 8px", gap: "6px",
-          background: won ? "rgba(61,107,58,0.08)" : "transparent",
-          borderTop: i === 1 ? "0.5px solid #e2d9c8" : "none",
-        }}>
-          <span style={{
-            fontSize: "12px", fontWeight: won ? 600 : 400, flex: 1,
-            color: won ? "#3D6B3A" : party.name === "TBD" ? "#aaa" : "#2D3748",
-            overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
-          }}>
-            {party.name ?? "TBD"}
-          </span>
-          {isDone && party.resultText != null && (
+      {([
+        { party: topParty, won: topWon, side: "a" as const },
+        { party: bottomParty, won: bottomWon, side: "b" as const },
+      ]).map(({ party, won, side }, i) => {
+        const isTbd = !party.name || party.name === "TBD";
+        const isLoser = isDone && !won;
+        const canClick = !isDone && isLekledare && !isTbd;
+        return (
+          <div key={i}
+            onClick={canClick ? () => declare(match.id, side) : undefined}
+            style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "8px 10px", gap: "6px",
+              background: won ? "rgba(61,107,58,0.10)" : canClick ? undefined : "transparent",
+              borderTop: i === 1 ? "0.5px solid #e2d9c8" : "none",
+              cursor: canClick ? "pointer" : "default",
+            }}
+          >
             <span style={{
-              fontSize: "12px", fontWeight: 700, minWidth: "20px", textAlign: "right",
-              color: won ? "#3D6B3A" : "#999",
+              fontSize: "12px", fontWeight: won ? 700 : 400, flex: 1,
+              color: won ? "#3D6B3A" : isLoser ? "#bbb" : isTbd ? "#bbb" : "#2D3748",
+              textDecoration: isLoser ? "line-through" : "none",
+              overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap",
             }}>
-              {party.resultText}
+              {party.name ?? "TBD"}
             </span>
-          )}
-        </div>
-      ))}
+            {won && <span style={{ fontSize: "11px", color: "#3D6B3A", fontWeight: 700, flexShrink: 0 }}>✓</span>}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1011,20 +1022,22 @@ export default function TurneringDetailPage({ params }: { params: Promise<{ id: 
                 {/* Bracket visualisation */}
                 <div className="mb-5 -mx-4 overflow-x-auto">
                   <div style={{ display: "inline-block", minWidth: "100%", paddingBottom: "8px" }}>
-                    <SingleEliminationBracket
-                      matches={transformMatchesForBracket(matches, teamMap)}
-                      matchComponent={BracketMatchCard}
-                      svgWrapper={({ children, bracketWidth, bracketHeight }) => (
-                        <svg
-                          width={Math.max((bracketWidth as number) ?? 400, 320)}
-                          height={Math.max((bracketHeight as number) ?? 300, 200)}
-                          viewBox={`0 0 ${Math.max((bracketWidth as number) ?? 400, 320)} ${Math.max((bracketHeight as number) ?? 300, 200)}`}
-                          style={{ display: "block" }}
-                        >
-                          {children}
-                        </svg>
-                      )}
-                    />
+                    <BracketContext.Provider value={{ declare: declareWinner, isLekledare }}>
+                      <SingleEliminationBracket
+                        matches={transformMatchesForBracket(matches, teamMap)}
+                        matchComponent={BracketMatchCard}
+                        svgWrapper={({ children, bracketWidth, bracketHeight }) => (
+                          <svg
+                            width={Math.max((bracketWidth as number) ?? 400, 320)}
+                            height={Math.max((bracketHeight as number) ?? 300, 200)}
+                            viewBox={`0 0 ${Math.max((bracketWidth as number) ?? 400, 320)} ${Math.max((bracketHeight as number) ?? 300, 200)}`}
+                            style={{ display: "block" }}
+                          >
+                            {children}
+                          </svg>
+                        )}
+                      />
+                    </BracketContext.Provider>
                   </div>
                 </div>
 
