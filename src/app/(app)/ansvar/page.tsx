@@ -32,7 +32,7 @@ export default function AnsvarPage() {
       assigned_to: form.assigned_to || null,
       description: form.description || null,
       sort_order: assignments.length,
-    } as never);
+    });
     setForm({ task: "", assigned_to: "", description: "" });
     setShowForm(false);
     setSaving(false);
@@ -45,7 +45,7 @@ export default function AnsvarPage() {
       task: editForm.task,
       assigned_to: editForm.assigned_to || null,
       description: editForm.description || null,
-    } as never).eq("id", id);
+    }).eq("id", id);
     setEditingId(null);
     setSaving(false);
     await load();

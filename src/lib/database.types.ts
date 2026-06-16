@@ -26,7 +26,7 @@ export type Database = {
           id: string;
           name: string;
           game: string;
-          format: "bracket" | "round_robin" | "free";
+          format: "bracket" | "round_robin" | "free" | "multi_event";
           status: "draft" | "active" | "completed";
           created_at: string;
         };
@@ -34,10 +34,10 @@ export type Database = {
           id?: string;
           name: string;
           game: string;
-          format: "bracket" | "round_robin" | "free";
+          format: "bracket" | "round_robin" | "free" | "multi_event";
           status?: "draft" | "active" | "completed";
         };
-        Update: { name?: string; status?: "draft" | "active" | "completed"; format?: "bracket" | "round_robin" | "free" };
+        Update: { name?: string; status?: "draft" | "active" | "completed"; format?: "bracket" | "round_robin" | "free" | "multi_event" };
         Relationships: [];
       };
       tournament_teams: {
@@ -97,6 +97,42 @@ export type Database = {
           team_a_id?: string | null;
           team_b_id?: string | null;
         };
+        Relationships: [];
+      };
+      tournament_events: {
+        Row: { id: string; tournament_id: string; name: string; scoring_type: string; created_at: string };
+        Insert: { id?: string; tournament_id: string; name: string; scoring_type?: string };
+        Update: { name?: string; scoring_type?: string };
+        Relationships: [];
+      };
+      tournament_event_results: {
+        Row: { id: string; event_id: string; tournament_team_id: string; value: number | null };
+        Insert: { id?: string; event_id: string; tournament_team_id: string; value?: number | null };
+        Update: { value?: number | null };
+        Relationships: [];
+      };
+      schedule_entries: {
+        Row: { id: string; time: string; title: string; description: string | null; sort_order: number };
+        Insert: { id?: string; time: string; title: string; description?: string | null; sort_order?: number };
+        Update: { time?: string; title?: string; description?: string | null; sort_order?: number };
+        Relationships: [];
+      };
+      site_info: {
+        Row: { key: string; value: string | null; updated_at: string };
+        Insert: { key: string; value?: string | null };
+        Update: { value?: string | null };
+        Relationships: [];
+      };
+      packing_items: {
+        Row: { id: string; text: string; category: string; sort_order: number };
+        Insert: { id?: string; text: string; category?: string; sort_order?: number };
+        Update: { text?: string; category?: string; sort_order?: number };
+        Relationships: [];
+      };
+      task_assignments: {
+        Row: { id: string; task: string; assigned_to: string | null; description: string | null; sort_order: number };
+        Insert: { id?: string; task: string; assigned_to?: string | null; description?: string | null; sort_order?: number };
+        Update: { task?: string; assigned_to?: string | null; description?: string | null; sort_order?: number };
         Relationships: [];
       };
     };
