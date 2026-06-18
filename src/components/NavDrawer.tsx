@@ -63,27 +63,13 @@ export function NavDrawer({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setSimRole(sessionStorage.getItem("simulate_role") ?? "");
-    setDrinks(Number(localStorage.getItem("drink_units") ?? "0"));
     setMounted(true);
+    fetch("/api/drinks").then((r) => r.json()).then(({ units }) => { if (units) setDrinks(units); });
   }, []);
-
-  // Sync localStorage → server once mounted
-  useEffect(() => {
-    if (!mounted) return;
-    const local = Number(localStorage.getItem("drink_units") ?? "0");
-    if (local > 0) {
-      fetch("/api/drinks", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ units: local }),
-      }).then((r) => r.json()).then((j) => { if (j.error) console.error("[drinks sync]", j.error); });
-    }
-  }, [mounted]);
 
   function addDrink() {
     const next = drinks + 1;
     setDrinks(next);
-    localStorage.setItem("drink_units", String(next));
     fetch("/api/drinks", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
