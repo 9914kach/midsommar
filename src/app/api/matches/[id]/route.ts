@@ -140,8 +140,8 @@ export async function PATCH(
             .eq("id", nextMatch.id);
         }
       }
-    } else if (hasByeMatch && !winnerId) {
-      const victoryTeam = match.team_a_id || match.team_b_id;
+    } else if (hasByeMatch) {
+      const victoryTeam = winnerId ?? (match.team_a_id || match.team_b_id);
       if (victoryTeam) {
         const { data: team } = await supabase.from("tournament_teams").select("points").eq("id", victoryTeam).single();
         if (team) {

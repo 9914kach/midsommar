@@ -4,9 +4,9 @@ export type Database = {
   public: {
     Tables: {
       users: {
-        Row: { id: string; username: string; role: Role; created_at: string };
-        Insert: { id?: string; username: string; role?: Role; created_at?: string };
-        Update: { username?: string; role?: Role };
+        Row: { id: string; username: string; role: Role; drink_units: number; created_at: string };
+        Insert: { id?: string; username: string; role?: Role; drink_units?: number; created_at?: string };
+        Update: { username?: string; role?: Role; drink_units?: number };
         Relationships: [];
       };
       official_teams: {

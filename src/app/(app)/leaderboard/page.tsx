@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useUser } from "@/lib/useUser";
-import { NavDrawer } from "@/components/NavDrawer";
 import { usePartyUnlocked } from "@/lib/PartyContext";
 
 type UserRow = { id: string; username: string };
@@ -27,9 +26,7 @@ function LockedScreen() {
       <div className="text-center">
         <div className="text-6xl mb-5">🌸</div>
         <h2 className="text-xl font-bold mb-2" style={{ color: "var(--blue-deep)" }}>Snart dags!</h2>
-        <p className="text-sm" style={{ color: "var(--text-muted)" }}>
-          Den här funktionen låses upp på midsommarafton.
-        </p>
+        <p className="text-sm" style={{ color: "var(--text-muted)" }}>Den här funktionen låses upp på midsommarafton.</p>
       </div>
     </div>
   );
@@ -91,25 +88,15 @@ export default function LeaderboardPage() {
   }
 
   async function fetchDrinks() {
-    const [{ data: settings }, { data: users }] = await Promise.all([
-      supabase.from("app_settings").select("key, value").like("key", "drink_units_%"),
-      supabase.from("users").select("id, username"),
-    ]);
+    const { data } = await supabase
+      .from("users")
+      .select("id, username, drink_units")
+      .gt("drink_units", 0)
+      .order("drink_units", { ascending: false });
 
-    const userMap = new Map<string, UserRow>(
-      ((users as UserRow[]) ?? []).map((u) => [u.id, u])
-    );
+    const entries: DrinkEntry[] = ((data ?? []) as { id: string; username: string; drink_units: number }[])
+      .map((u) => ({ user: { id: u.id, username: u.username }, units: u.drink_units }));
 
-    const entries: DrinkEntry[] = ((settings ?? []) as { key: string; value: string }[])
-      .map(({ key, value }) => {
-        const userId = key.replace("drink_units_", "");
-        const user = userMap.get(userId);
-        if (!user) return null;
-        return { user, units: Number(value) || 0 };
-      })
-      .filter((x): x is DrinkEntry => x !== null && x.units > 0);
-
-    entries.sort((a, b) => b.units - a.units);
     setDrinks(entries);
   }
 
@@ -124,18 +111,17 @@ export default function LeaderboardPage() {
     const ch = supabase.channel("leaderboard")
       .on("postgres_changes", { event: "*", schema: "public", table: "bets" }, fetchBetting)
       .on("postgres_changes", { event: "*", schema: "public", table: "bet_entries" }, fetchBetting)
-      .on("postgres_changes", { event: "*", schema: "public", table: "app_settings" }, fetchDrinks)
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "users" }, fetchDrinks)
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, []);
 
   if (!partyUnlocked && !me.is("värd")) {
-    return <NavDrawer><LockedScreen /></NavDrawer>;
+    return <LockedScreen />;
   }
 
   return (
-    <NavDrawer>
-      <div className="page-bg px-4 pt-6 pb-10 max-w-md mx-auto">
+    <div className="page-bg px-4 pt-6 pb-10 max-w-md mx-auto">
         <div className="pt-4 pb-4">
           <p className="page-subtitle mb-1">Individuell statistik</p>
           <h1 className="page-title">Leaderboard</h1>
@@ -164,7 +150,6 @@ export default function LeaderboardPage() {
           <BettingLeaderboard stats={stats} meId={me.id} />
         )}
       </div>
-    </NavDrawer>
   );
 }
 

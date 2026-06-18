@@ -3,7 +3,6 @@ import { supabase } from "@/lib/supabase";
 import {
   generateRoundRobinMatches,
   generateBracketMatches,
-  getByeMatchIndices,
 } from "@/lib/tournament";
 
 export async function POST(
@@ -44,12 +43,11 @@ export async function POST(
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   if (format === "bracket" && inserted) {
-    const byeIndices = getByeMatchIndices(matches);
+    const byeInserted = inserted.filter(
+      (m) => m.round === 1 && ((m.team_a_id !== null) !== (m.team_b_id !== null))
+    );
 
-    for (const idx of byeIndices) {
-      const dbMatch = inserted[idx];
-      if (!dbMatch) continue;
-
+    for (const dbMatch of byeInserted) {
       const winnerId = dbMatch.team_a_id ?? dbMatch.team_b_id;
       if (!winnerId) continue;
 

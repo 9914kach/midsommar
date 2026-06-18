@@ -67,25 +67,28 @@ export function NavDrawer({ children }: { children: React.ReactNode }) {
     setMounted(true);
   }, []);
 
-  // Sync localStorage → Supabase once me.id is available
+  // Sync localStorage → server once mounted
   useEffect(() => {
-    if (!me.id || !mounted) return;
+    if (!mounted) return;
     const local = Number(localStorage.getItem("drink_units") ?? "0");
     if (local > 0) {
-      supabase.from("app_settings").upsert(
-        { key: `drink_units_${me.id}`, value: String(local) },
-        { onConflict: "key" }
-      );
+      fetch("/api/drinks", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ units: local }),
+      }).then((r) => r.json()).then((j) => { if (j.error) console.error("[drinks sync]", j.error); });
     }
-  }, [me.id, mounted]);
+  }, [mounted]);
 
   function addDrink() {
     const next = drinks + 1;
     setDrinks(next);
     localStorage.setItem("drink_units", String(next));
-    if (me.id) {
-      supabase.from("app_settings").upsert({ key: `drink_units_${me.id}`, value: String(next) }, { onConflict: "key" });
-    }
+    fetch("/api/drinks", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ units: next }),
+    });
     const id = Date.now();
     setPops((p) => [...p, { id }]);
     setTimeout(() => setPops((p) => p.filter((x) => x.id !== id)), 750);
