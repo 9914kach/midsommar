@@ -241,43 +241,50 @@ export default function FemkampPage() {
     ]);
     if (!officialTeams) { setSyncing(false); return; }
 
-    const existingTeams = (currentTeams as TTeam[]) ?? [];
+    const existing = (currentTeams as TTeam[]) ?? [];
     const officialIds = new Set(officialTeams.map((ot) => ot.id));
     const teamIdsWithResults = new Set((existingResults ?? []).map((r) => r.tournament_team_id));
 
-    // Stale: linked to an official team that no longer exists
-    const stale = existingTeams.filter((t) => t.official_team_id && !officialIds.has(t.official_team_id));
-
-    // Duplicates: same official_team_id linked more than once
-    // Keep the one with results (or the first if none have results), delete the rest
+    // Desired state: exactly one tournament_team per official_team.
+    // For each official_team_id group, keep the row that has results (or first if none do).
+    // Everything else — orphans (null official_team_id), stale, extras — gets deleted.
+    const keepIds = new Set<string>();
     const grouped: Record<string, TTeam[]> = {};
-    for (const t of existingTeams) {
-      if (!t.official_team_id) continue;
-      (grouped[t.official_team_id] ??= []).push(t);
+    for (const t of existing) {
+      const key = t.official_team_id ?? "__null__";
+      (grouped[key] ??= []).push(t);
     }
-    const duplicates: TTeam[] = [];
-    for (const group of Object.values(grouped)) {
-      if (group.length <= 1) continue;
+    for (const [key, group] of Object.entries(grouped)) {
+      if (key === "__null__") continue; // orphans → delete all
+      if (!officialIds.has(key)) continue; // stale → delete all
       const canonical = group.find((t) => teamIdsWithResults.has(t.id)) ?? group[0];
-      duplicates.push(...group.filter((t) => t.id !== canonical.id));
+      keepIds.add(canonical.id);
     }
 
-    const toDelete = [...stale, ...duplicates];
-    await Promise.all(toDelete.map((t) =>
-      fetch(`/api/admin/tournaments/${tournamentId}/teams/${t.id}`, { method: "DELETE" })
-    ));
+    const toDelete = existing.filter((t) => !keepIds.has(t.id));
+    await Promise.all(
+      toDelete.map((t) =>
+        fetch(`/api/admin/tournaments/${tournamentId}/teams/${t.id}`, { method: "DELETE" })
+      )
+    );
 
-    // Add official teams not yet linked
-    const remaining = existingTeams.filter((t) => !toDelete.find((d) => d.id === t.id));
-    const linkedIds = new Set(remaining.map((t) => t.official_team_id).filter(Boolean));
+    // Re-fetch after deletes to get accurate remaining state
+    const { data: afterDelete } = await supabase
+      .from("tournament_teams")
+      .select("official_team_id")
+      .eq("tournament_id", tournamentId);
+    const linkedIds = new Set((afterDelete ?? []).map((t) => t.official_team_id).filter(Boolean));
+
     const toAdd = officialTeams.filter((ot) => !linkedIds.has(ot.id));
-    await Promise.all(toAdd.map((ot) =>
-      fetch(`/api/admin/tournaments/${tournamentId}/teams`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: ot.name, color: ot.color, official_team_id: ot.id }),
-      })
-    ));
+    await Promise.all(
+      toAdd.map((ot) =>
+        fetch(`/api/admin/tournaments/${tournamentId}/teams`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: ot.name, color: ot.color, official_team_id: ot.id }),
+        })
+      )
+    );
 
     setSyncing(false);
     await fetchData();
