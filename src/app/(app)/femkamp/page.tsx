@@ -758,9 +758,20 @@ export default function FemkampPage() {
 
       {/* ── Total standings ── */}
       <div className="card p-4 mb-4">
-        <p style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-muted)", margin: "0 0 12px" }}>
-          Totalpoäng
-        </p>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "12px" }}>
+          <p style={{ fontSize: "11px", fontWeight: 600, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-muted)", margin: 0 }}>
+            Totalpoäng
+          </p>
+          {isLekledare && (
+            <button
+              onClick={() => syncOfficialTeams(tournament!.id)}
+              disabled={syncing}
+              style={{ fontSize: "11px", color: "var(--blue-deep)", background: "none", border: "none", cursor: syncing ? "default" : "pointer", opacity: syncing ? 0.5 : 1, padding: "2px 0" }}
+            >
+              {syncing ? "Synkar..." : "↻ Synka lag"}
+            </button>
+          )}
+        </div>
         {teams.length === 0 ? (
           <p style={{ fontSize: "14px", color: "var(--text-muted)" }}>Inga lag.</p>
         ) : (
