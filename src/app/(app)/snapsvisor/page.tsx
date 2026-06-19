@@ -31,6 +31,7 @@ export default function SnapsvisorPage() {
   const me = useUser();
   const [open, setOpen] = useState<string | null>(null);
   const [activeTag, setActiveTag] = useState<string>("alla");
+  const [query, setQuery] = useState("");
   const [customVisor, setCustomVisor] = useState<CustomVisa[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -56,12 +57,22 @@ export default function SnapsvisorPage() {
 
   const allTags = ["alla", "egna", ...Array.from(new Set(staticVisor.flatMap((v) => v.tags ?? [])))];
 
-  const filtered =
+  const tagFiltered =
     activeTag === "alla"
       ? allVisor
       : activeTag === "egna"
       ? allVisor.filter((v) => v.isCustom)
       : allVisor.filter((v) => !v.isCustom && v.tags?.includes(activeTag));
+
+  const q = query.trim().toLowerCase();
+  const filtered = q
+    ? tagFiltered.filter(
+        (v) =>
+          v.title.toLowerCase().includes(q) ||
+          (v.melody ?? "").toLowerCase().includes(q) ||
+          v.lyrics.toLowerCase().includes(q)
+      )
+    : tagFiltered;
 
   function random() {
     const r = allVisor[Math.floor(Math.random() * allVisor.length)];
@@ -179,6 +190,18 @@ export default function SnapsvisorPage() {
             </button>
           ))}
         </div>
+
+        <input
+          type="search"
+          placeholder="Sök visa, melodi eller text..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="w-full px-3 py-2 rounded-lg border text-sm outline-none"
+          style={{
+            borderColor: "var(--border)", background: "var(--birch)",
+            color: "var(--text-dark)", marginBottom: "8px",
+          }}
+        />
 
         <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "8px" }}>
           {filtered.map((visa) => {
