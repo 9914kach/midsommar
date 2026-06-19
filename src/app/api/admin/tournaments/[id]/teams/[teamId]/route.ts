@@ -38,6 +38,11 @@ export async function DELETE(
     .eq("tournament_id", id)
     .or(`team_a_id.eq.${teamId},team_b_id.eq.${teamId}`);
 
+  await supabase
+    .from("tournament_event_results")
+    .delete()
+    .eq("tournament_team_id", teamId);
+
   const { error } = await supabase
     .from("tournament_teams")
     .delete()

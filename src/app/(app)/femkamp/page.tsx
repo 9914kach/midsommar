@@ -234,26 +234,33 @@ export default function FemkampPage() {
 
   async function syncOfficialTeams(tournamentId: string) {
     setSyncing(true);
-    const [{ data: officialTeams }, { data: currentTeams }] = await Promise.all([
+    const [{ data: officialTeams }, { data: currentTeams }, { data: existingResults }] = await Promise.all([
       supabase.from("official_teams").select("id, name, color").order("created_at"),
       supabase.from("tournament_teams").select("id, name, color, official_team_id").eq("tournament_id", tournamentId),
+      supabase.from("tournament_event_results").select("tournament_team_id"),
     ]);
     if (!officialTeams) { setSyncing(false); return; }
 
     const existingTeams = (currentTeams as TTeam[]) ?? [];
     const officialIds = new Set(officialTeams.map((ot) => ot.id));
+    const teamIdsWithResults = new Set((existingResults ?? []).map((r) => r.tournament_team_id));
 
     // Stale: linked to an official team that no longer exists
     const stale = existingTeams.filter((t) => t.official_team_id && !officialIds.has(t.official_team_id));
 
-    // Duplicates: same official_team_id linked more than once — keep the first, remove the rest
-    const seen = new Set<string>();
-    const duplicates = existingTeams.filter((t) => {
-      if (!t.official_team_id) return false;
-      if (seen.has(t.official_team_id)) return true;
-      seen.add(t.official_team_id);
-      return false;
-    });
+    // Duplicates: same official_team_id linked more than once
+    // Keep the one with results (or the first if none have results), delete the rest
+    const grouped: Record<string, TTeam[]> = {};
+    for (const t of existingTeams) {
+      if (!t.official_team_id) continue;
+      (grouped[t.official_team_id] ??= []).push(t);
+    }
+    const duplicates: TTeam[] = [];
+    for (const group of Object.values(grouped)) {
+      if (group.length <= 1) continue;
+      const canonical = group.find((t) => teamIdsWithResults.has(t.id)) ?? group[0];
+      duplicates.push(...group.filter((t) => t.id !== canonical.id));
+    }
 
     const toDelete = [...stale, ...duplicates];
     await Promise.all(toDelete.map((t) =>
