@@ -175,7 +175,14 @@ export default function FemkampPage() {
       supabase.from("app_settings").select("value").eq("key", "femkamp_finished").maybeSingle(),
     ]);
 
-    const fetchedTeams = (teamsData as TTeam[]) ?? [];
+    const rawTeams = (teamsData as TTeam[]) ?? [];
+    const seenTeamIds = new Set<string>();
+    const fetchedTeams = rawTeams.filter((t) => {
+      const key = t.official_team_id ?? t.id;
+      if (seenTeamIds.has(key)) return false;
+      seenTeamIds.add(key);
+      return true;
+    });
     setTeams(fetchedTeams);
     setEvents((eventsData as unknown as TEvent[]) ?? []);
     setActiveEventId(activeSetting?.value ?? null);
@@ -225,11 +232,15 @@ export default function FemkampPage() {
     return () => clearInterval(interval);
   }, []);
 
-  async function syncOfficialTeams(tournamentId: string, existingTeams: TTeam[]) {
+  async function syncOfficialTeams(tournamentId: string) {
     setSyncing(true);
-    const { data: officialTeams } = await supabase.from("official_teams").select("id, name, color").order("created_at");
+    const [{ data: officialTeams }, { data: currentTeams }] = await Promise.all([
+      supabase.from("official_teams").select("id, name, color").order("created_at"),
+      supabase.from("tournament_teams").select("id, name, color, official_team_id").eq("tournament_id", tournamentId),
+    ]);
     if (!officialTeams) { setSyncing(false); return; }
 
+    const existingTeams = (currentTeams as TTeam[]) ?? [];
     const officialIds = new Set(officialTeams.map((ot) => ot.id));
 
     // Stale: linked to an official team that no longer exists
@@ -278,7 +289,7 @@ export default function FemkampPage() {
       const { tournament: created } = await res.json();
       setNotFound(false);
       setLoading(true);
-      await syncOfficialTeams(created.id, []);
+      await syncOfficialTeams(created.id);
     }
     setCreating(false);
   }
@@ -323,7 +334,7 @@ export default function FemkampPage() {
     if (!tournament) return;
     setStarting(true);
     // Sync teams first
-    await syncOfficialTeams(tournament.id, teams);
+    await syncOfficialTeams(tournament.id);
     // Set first event as active if exists
     if (events.length > 0) {
       await fetch("/api/admin/femkamp/active-event", {
@@ -571,7 +582,7 @@ export default function FemkampPage() {
               Officiella lag ({teams.length})
             </p>
             {isLekledare && (
-              <button onClick={() => syncOfficialTeams(tournament.id, teams)} disabled={syncing}
+              <button onClick={() => syncOfficialTeams(tournament.id)} disabled={syncing}
                 style={{ fontSize: "12px", color: "var(--gold)", background: "none", border: "none", cursor: "pointer" }}>
                 {syncing ? "Synkar..." : "↻ Synka"}
               </button>
@@ -1113,7 +1124,7 @@ export default function FemkampPage() {
           {/* Sync teams */}
           {!showAddEvent && !showPenalty && (
             <button
-              onClick={() => syncOfficialTeams(tournament!.id, teams)}
+              onClick={() => syncOfficialTeams(tournament!.id)}
               disabled={syncing}
               className="w-full py-3 rounded-xl text-sm font-semibold"
               style={{ background: "rgba(27,63,110,0.08)", color: "var(--blue-deep)", border: "1px solid rgba(27,63,110,0.2)" }}
