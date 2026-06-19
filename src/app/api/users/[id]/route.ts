@@ -28,6 +28,7 @@ export async function DELETE(
   }
 
   await supabase.from("official_team_members").delete().eq("user_id", id);
+  await supabase.from("bet_entries").delete().eq("user_id", id);
   const { error } = await supabase.from("users").delete().eq("id", id);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 

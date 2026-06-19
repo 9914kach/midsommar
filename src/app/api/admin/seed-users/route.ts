@@ -40,6 +40,18 @@ export async function DELETE(request: NextRequest) {
 
   const myId = request.cookies.get("midsommar_user_id")?.value;
 
+  const { data: toDelete } = await supabase
+    .from("users")
+    .select("id")
+    .eq("role", "gäst")
+    .neq("id", myId ?? "");
+
+  const ids = (toDelete ?? []).map((u) => u.id);
+
+  if (ids.length > 0) {
+    await supabase.from("bet_entries").delete().in("user_id", ids);
+  }
+
   const { error } = await supabase
     .from("users")
     .delete()
