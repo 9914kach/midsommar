@@ -116,10 +116,6 @@ export default function LeaderboardPage() {
     return () => { supabase.removeChannel(ch); };
   }, []);
 
-  if (!partyUnlocked && !me.is("värd")) {
-    return <LockedScreen />;
-  }
-
   return (
     <div className="page-bg px-4 pt-6 pb-10 max-w-md mx-auto">
         <div className="pt-4 pb-4">

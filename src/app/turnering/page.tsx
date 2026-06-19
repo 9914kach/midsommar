@@ -75,10 +75,6 @@ export default function TurneringPage() {
     setCreating(false);
   }
 
-  if (!partyUnlocked && !me.is("värd")) {
-    return <NavDrawer><LockedScreen /></NavDrawer>;
-  }
-
   return (
     <NavDrawer>
       <div className="page-bg px-4 pt-6 pb-10 max-w-md mx-auto">

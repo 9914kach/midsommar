@@ -100,7 +100,7 @@ export function NavDrawer({ children }: { children: React.ReactNode }) {
     return () => { document.body.style.overflow = ""; };
   }, [open]);
 
-  const guestLocked = !partyUnlocked && !me.is("värd");
+  const guestLocked = false;
 
   return (
     <PartyContext.Provider value={partyUnlocked}>

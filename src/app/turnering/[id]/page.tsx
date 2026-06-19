@@ -644,19 +644,6 @@ export default function TurneringDetailPage({ params }: { params: Promise<{ id: 
   const recommendedFormat = officialTeams.length >= 2 ? recommendFormat(officialTeams.length) : null;
   const ranking = format === "multi_event" ? computeRanking() : [];
 
-  if (!partyUnlocked && !me.is("värd")) {
-    return (
-      <NavDrawer>
-        <div className="page-bg flex items-center justify-center px-8" style={{ minHeight: "calc(100dvh - 56px)" }}>
-          <div className="text-center">
-            <div className="text-6xl mb-5">🌿</div>
-            <h2 className="text-xl font-bold mb-2" style={{ color: "var(--blue-deep)" }}>Snart dags!</h2>
-            <p className="text-sm" style={{ color: "var(--text-muted)" }}>Turneringarna öppnar på midsommarafton.</p>
-          </div>
-        </div>
-      </NavDrawer>
-    );
-  }
 
   if (loading) return (
     <NavDrawer>

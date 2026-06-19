@@ -47,8 +47,6 @@ export default function BetsPage() {
   const [submitting, setSubmitting] = useState(false);
   const formRef = useRef<HTMLDivElement>(null);
 
-  const guestLocked = !partyUnlocked && !me.is("värd");
-
   async function loadBets() {
     const { data: betRows } = await supabase
       .from("bets")
@@ -114,14 +112,6 @@ export default function BetsPage() {
     setShowForm(false);
     setSubmitting(false);
     await loadBets();
-  }
-
-  if (guestLocked) {
-    return (
-      <div style={{ padding: "60px 24px", textAlign: "center" }}>
-        <p style={{ color: "var(--text-muted)", fontSize: "15px" }}>Betting öppnar på festdagen.</p>
-      </div>
-    );
   }
 
   return (
