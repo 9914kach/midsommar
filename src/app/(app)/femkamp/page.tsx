@@ -246,8 +246,7 @@ export default function FemkampPage() {
     const teamIdsWithResults = new Set((existingResults ?? []).map((r) => r.tournament_team_id));
 
     // Desired state: exactly one tournament_team per official_team.
-    // For each official_team_id group, keep the row that has results (or first if none do).
-    // Everything else — orphans (null official_team_id), stale, extras — gets deleted.
+    // Keep the row that has results (or first if none), delete everything else.
     const keepIds = new Set<string>();
     const grouped: Record<string, TTeam[]> = {};
     for (const t of existing) {
@@ -255,20 +254,24 @@ export default function FemkampPage() {
       (grouped[key] ??= []).push(t);
     }
     for (const [key, group] of Object.entries(grouped)) {
-      if (key === "__null__") continue; // orphans → delete all
-      if (!officialIds.has(key)) continue; // stale → delete all
+      if (key === "__null__") continue;         // orphans → delete all
+      if (!officialIds.has(key)) continue;      // stale   → delete all
       const canonical = group.find((t) => teamIdsWithResults.has(t.id)) ?? group[0];
       keepIds.add(canonical.id);
     }
 
-    const toDelete = existing.filter((t) => !keepIds.has(t.id));
-    await Promise.all(
-      toDelete.map((t) =>
-        fetch(`/api/admin/tournaments/${tournamentId}/teams/${t.id}`, { method: "DELETE" })
-      )
-    );
+    const toDeleteIds = existing.filter((t) => !keepIds.has(t.id)).map((t) => t.id);
 
-    // Re-fetch after deletes to get accurate remaining state
+    if (toDeleteIds.length > 0) {
+      // Clean up dependent rows first, then the teams themselves — all via Supabase directly
+      await supabase.from("tournament_event_results").delete().in("tournament_team_id", toDeleteIds);
+      await supabase.from("tournament_team_members").delete().in("tournament_team_id", toDeleteIds);
+      await supabase.from("matches").delete().in("team_a_id", toDeleteIds);
+      await supabase.from("matches").delete().in("team_b_id", toDeleteIds);
+      await supabase.from("tournament_teams").delete().in("id", toDeleteIds);
+    }
+
+    // Re-fetch after deletes to get accurate remaining state before adding
     const { data: afterDelete } = await supabase
       .from("tournament_teams")
       .select("official_team_id")
@@ -276,15 +279,11 @@ export default function FemkampPage() {
     const linkedIds = new Set((afterDelete ?? []).map((t) => t.official_team_id).filter(Boolean));
 
     const toAdd = officialTeams.filter((ot) => !linkedIds.has(ot.id));
-    await Promise.all(
-      toAdd.map((ot) =>
-        fetch(`/api/admin/tournaments/${tournamentId}/teams`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: ot.name, color: ot.color, official_team_id: ot.id }),
-        })
-      )
-    );
+    if (toAdd.length > 0) {
+      await supabase.from("tournament_teams").insert(
+        toAdd.map((ot) => ({ tournament_id: tournamentId, name: ot.name, color: ot.color, official_team_id: ot.id }))
+      );
+    }
 
     setSyncing(false);
     await fetchData();
